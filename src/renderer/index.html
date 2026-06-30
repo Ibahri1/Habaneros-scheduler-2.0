@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <title>Habaneros Scheduler</title>
+  <link rel="stylesheet" href="styles/app.css">
+</head>
+<body>
+  <header class="app-header">
+    <div><p class="eyebrow">Habaneros</p><h1>Staff Scheduler</h1></div>
+    <div class="header-actions">
+      <label class="theme-toggle"><input id="darkModeToggle" type="checkbox"> Dark Mode</label>
+      <button id="importBtn" class="secondary" type="button">Import</button>
+      <button id="exportJsonBtn" class="secondary" type="button">Export JSON</button>
+      <button id="exportCsvBtn" class="secondary" type="button">Export CSV</button>
+      <button id="clearBtn" class="secondary danger" type="button">Clear</button>
+    </div>
+  </header>
+  <main class="layout">
+    <section class="panel controls-panel">
+      <div class="section-head"><h2>Add Worker</h2><p>Enter workers and update their availability whenever it changes.</p></div>
+      <form id="workerForm" class="worker-form">
+        <label>Name <input id="workerName" type="text" autocomplete="off" placeholder="Employee name" required></label>
+        <div class="form-grid">
+          <label>Position <input id="workerPosition" type="text" autocomplete="off" placeholder="Cook, Cashier, Server" value="Crew"></label>
+          <label>Manager <select id="isManager"><option value="false">No</option><option value="true">Yes</option></select></label>
+          <label>Max weekly hours <input id="maxWeeklyHours" type="number" min="0" max="168" step="0.5" value="40"></label>
+          <label>Preferred weekly hours <input id="preferredWeeklyHours" type="number" min="0" max="168" step="0.5" value="32"></label>
+        </div>
+        <fieldset><legend>Qualified for</legend>
+          <label class="check-row"><input id="canOpen" type="checkbox"> Opening</label>
+          <label class="check-row"><input id="canClose" type="checkbox"> Closing</label>
+          <label class="check-row"><input id="needsBreakFlag" type="checkbox" checked> Lunch reminder after configured hours</label>
+        </fieldset>
+        <fieldset><legend>Available days</legend><div id="availabilityChecks" class="day-checks"></div></fieldset>
+        <fieldset><legend>Worker shift times</legend><div class="time-grid"><label>Open start <input id="workerOpenStart" type="time" value="08:00"></label><label>Open end <input id="workerOpenEnd" type="time" value="14:00"></label><label>Close start <input id="workerCloseStart" type="time" value="16:00"></label><label>Close end <input id="workerCloseEnd" type="time" value="22:00"></label></div></fieldset>
+        <label>Notes <textarea id="workerNotes" rows="3" placeholder="Optional notes"></textarea></label>
+        <button type="submit" class="primary">Add Worker</button>
+      </form>
+    </section>
+    <section class="panel">
+      <div class="section-head"><h2>Schedule Rules</h2><p>Set the week, default shift times, and staffing needed for each day.</p></div>
+      <div class="rules-grid"><label>Week starts <input id="weekStart" type="date"></label><label>Open shift <input id="openShift" type="time" value="08:00"></label><label>Close shift <input id="closeShift" type="time" value="16:00"></label><label>Default hours <input id="shiftHours" type="number" min="2" max="12" step="0.5" value="8"></label><label>Lunch after hours <input id="mealBreakHours" type="number" min="1" max="12" step="0.5" value="6"></label></div>
+      <div class="staffing-table" id="staffingTable"></div>
+      <div class="actions-row"><button id="generateBtn" class="primary" type="button">Generate Schedule</button><button id="printBtn" class="secondary" type="button">Print Schedule</button></div>
+    </section>
+    <section class="panel wide"><div class="section-head with-action"><div><h2>Workers</h2><p>Edit availability, qualifications, status, and each worker's shift times.</p></div><span id="workerCount" class="count-pill">0 workers</span></div><div id="workersList" class="workers-list"></div></section>
+    <section class="panel wide"><div class="section-head with-action"><div><h2>Generated Schedule</h2><p>Warnings appear when coverage is missing, a manager is missing, or a lunch reminder is needed.</p></div><span id="scheduleStatus" class="count-pill">Not generated</span></div><div id="scheduleOutput" class="schedule-output"></div></section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

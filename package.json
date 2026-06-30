@@ -1,0 +1,80 @@
+{
+  "name": "habaneros-scheduler",
+  "version": "1.1.0",
+  "description": "Windows desktop staff scheduling application for Habaneros Mexican Grill.",
+  "author": "Habaneros Mexican Grill",
+  "private": true,
+  "main": "dist/main/main.js",
+  "scripts": {
+    "dev": "node scripts/copy-assets.mjs && node scripts/build-renderer.mjs && concurrently -k \"npm:watch\" \"npm:watch-renderer\" \"npm:watch-assets\" \"npm:electron\"",
+    "watch": "tsc -w",
+    "watch-renderer": "node scripts/watch-renderer.mjs",
+    "electron": "wait-on dist/main/main.js dist/preload/preload.js dist/renderer/app.js dist/renderer/index.html dist/renderer/styles/app.css && electron .",
+    "build": "node scripts/clean.mjs && tsc && node scripts/build-renderer.mjs && node scripts/copy-assets.mjs",
+    "dist": "npm run build && electron-builder --win nsis portable",
+    "lint": "tsc --noEmit",
+    "watch-assets": "node scripts/watch-assets.mjs"
+  },
+  "dependencies": {
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.10",
+    "7zip-bin": "^5.2.0",
+    "concurrently": "^9.1.2",
+    "electron": "^31.7.7",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.7.2",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.habanerosmexicangrill.scheduler",
+    "productName": "Habaneros Scheduler",
+    "copyright": "Copyright 2026 Habaneros Mexican Grill",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "build/icon.ico",
+      "package.json"
+    ],
+    "asar": true,
+    "extraMetadata": {
+      "main": "dist/main/main.js"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "publisherName": "Habaneros Mexican Grill",
+      "artifactName": "Habaneros-Scheduler-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Habaneros Scheduler",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
+    }
+  },
+  "engines": {
+    "node": ">=20 <23"
+  }
+}
