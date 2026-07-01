@@ -3,6 +3,7 @@ import { normalizeWorker } from "../../../shared/defaults";
 import { AppState, DayName, Worker } from "../../../shared/types";
 
 export interface WorkerFormInput {
+  employeeCode: string;
   name: string;
   position: string;
   isManager: boolean;
@@ -22,6 +23,7 @@ export interface WorkerFormInput {
 export function createWorker(input: WorkerFormInput, state: AppState): Worker {
   return normalizeWorker({
     id: randomUUID(),
+    employeeCode: input.employeeCode,
     name: input.name.trim(),
     position: input.position.trim() || "Crew",
     role: input.isManager ? "Manager" : "Crew",

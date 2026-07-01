@@ -45,6 +45,7 @@ export function normalizeWorker(worker: Partial<Worker> & { id: string; name: st
   const maxWeeklyHours = Number(worker.maxWeeklyHours || 40);
   return {
     id: worker.id,
+    employeeCode: /^\d{4}$/.test(String(worker.employeeCode || "")) ? String(worker.employeeCode) : "",
     name: String(worker.name || "Unnamed Worker"),
     position,
     role,

@@ -6,6 +6,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>Habaneros Scheduler</title>
   <link rel="stylesheet" href="styles/app.css">
+  <link rel="stylesheet" href="styles/cloud.css">
 </head>
 <body>
   <header class="app-header">
@@ -24,6 +25,7 @@
       <form id="workerForm" class="worker-form">
         <label>Name <input id="workerName" type="text" autocomplete="off" placeholder="Employee name" required></label>
         <div class="form-grid">
+          <label>4-digit employee code <input id="employeeCode" type="text" inputmode="numeric" pattern="\d{4}" maxlength="4" autocomplete="off" placeholder="1234" required></label>
           <label>Position <input id="workerPosition" type="text" autocomplete="off" placeholder="Cook, Cashier, Server" value="Crew"></label>
           <label>Manager <select id="isManager"><option value="false">No</option><option value="true">Yes</option></select></label>
           <label>Max weekly hours <input id="maxWeeklyHours" type="number" min="0" max="168" step="0.5" value="40"></label>
@@ -46,7 +48,28 @@
       <div class="staffing-table" id="staffingTable"></div>
       <div class="actions-row"><button id="generateBtn" class="primary" type="button">Generate Schedule</button><button id="printBtn" class="secondary" type="button">Print Schedule</button></div>
     </section>
-    <section class="panel wide"><div class="section-head with-action"><div><h2>Workers</h2><p>Edit availability, qualifications, status, and each worker's shift times.</p></div><span id="workerCount" class="count-pill">0 workers</span></div><div id="workersList" class="workers-list"></div></section>
+    <section class="panel wide">
+      <div class="section-head with-action"><div><h2>Supabase Configuration</h2><p>Connect the employee phone form without replacing local storage.</p></div><span id="cloudStatus" class="count-pill">Not configured</span></div>
+      <form id="cloudConfigForm" class="cloud-config-grid">
+        <label>Supabase URL <input id="supabaseUrl" type="url" autocomplete="off" placeholder="https://your-project.supabase.co"></label>
+        <label>Public anon key <input id="supabaseAnonKey" type="password" autocomplete="off" placeholder="Supabase anon key"></label>
+        <div class="actions-row cloud-actions"><button class="primary" type="submit">Save Settings</button><button id="testCloudBtn" class="secondary" type="button">Test Connection</button><button id="syncEmployeesBtn" class="secondary" type="button">Sync Employees</button></div>
+      </form>
+    </section>
+    <section class="panel wide">
+      <div class="section-head with-action"><div><h2>Availability Submissions</h2><p>Review phone submissions and apply availability manually. Existing schedules are never changed.</p></div><div class="actions-row"><span id="submissionCount" class="count-pill">Not synced</span><button id="refreshSubmissionsBtn" class="secondary" type="button">Refresh</button><button id="applyAllBtn" class="primary" type="button">Apply All</button></div></div>
+      <div id="submissionsList" class="submissions-list"><div class="empty-state">Configure Supabase, sync employees, then refresh submissions.</div></div>
+    </section>
+    <section class="panel wide">
+      <div class="section-head with-action"><div><h2>Availability History</h2><p>Reviewed, applied, and rejected submissions remain here until permanently deleted.</p></div><span id="historyCount" class="count-pill">Not synced</span></div>
+      <div class="history-filters">
+        <label>Employee <select id="historyEmployeeFilter"><option value="">All employees</option></select></label>
+        <label>Week <select id="historyWeekFilter"><option value="">All weeks</option></select></label>
+        <label>Status <select id="historyStatusFilter"><option value="">All statuses</option><option value="applied">Applied</option><option value="reviewed">Reviewed</option><option value="rejected">Rejected</option></select></label>
+      </div>
+      <div id="historyList" class="history-list"><div class="empty-state">Refresh submissions to load history.</div></div>
+    </section>
+    <section class="panel wide"><div class="section-head with-action"><div><h2>Workers</h2><p>Edit availability, qualifications, status, employee code, and each worker's shift times.</p></div><span id="workerCount" class="count-pill">0 workers</span></div><div id="workersList" class="workers-list"></div></section>
     <section class="panel wide"><div class="section-head with-action"><div><h2>Generated Schedule</h2><p>Warnings appear when coverage is missing, a manager is missing, or a lunch reminder is needed.</p></div><span id="scheduleStatus" class="count-pill">Not generated</span></div><div id="scheduleOutput" class="schedule-output"></div></section>
   </main>
   <script src="app.js"></script>

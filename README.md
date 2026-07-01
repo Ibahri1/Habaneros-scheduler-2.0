@@ -68,6 +68,92 @@ Window size and position are stored separately:
 
 Application updates do not overwrite this directory.
 
+Cloud connection settings are stored separately at:
+
+`%APPDATA%\Habaneros Scheduler\cloud-settings.json`
+
+The desktop app remains fully usable when Supabase is unavailable.
+
+## Employee Availability Phone Form
+
+Phase 1 adds a manual cloud inbox for employee availability. Phone submissions do not generate a schedule and do not modify an existing schedule.
+
+### Supabase Setup
+
+1. Create a Supabase project.
+2. Open Supabase SQL Editor.
+3. Open `supabase/schema.sql` from this project.
+4. Run the complete SQL script once. Run it again if upgrading from the earlier manager-sync-key version so the old RPC signatures are removed.
+5. In the desktop app, enter the Supabase project URL and public anon key.
+6. Add a unique four-digit code to every worker and click **Sync Employees**.
+
+### Required 1.3.0 Database Update
+
+For an existing connected Supabase project, run this exact file once in Supabase SQL Editor:
+
+`supabase/migrations/1.3.0-availability-workflow.sql`
+
+Run the entire script in one operation. It adds action dates and manager notes, changes the week start to Sunday, enforces the next-four-Sundays submission window, prevents duplicate weekly submissions, updates manager review functions, and adds permanent history deletion. It finishes by asking PostgREST to reload its schema cache.
+
+For a brand-new Supabase project, run `supabase/schema.sql` instead. Do not run both scripts on a new project.
+
+The schema creates only the Phase 1 tables:
+
+- `employees` stores the desktop worker link, display name, hashed code, and active status.
+- `availability_submissions` stores the employee, week start, available days, timestamp, and review status.
+
+Row Level Security is enabled with no direct anonymous table access. The phone form and desktop app use restricted database functions through the public anon key for Phase 1.
+
+### Configure the Phone Form
+
+1. Edit `employee-availability/config.js`.
+2. Replace `https://YOUR-PROJECT.supabase.co` with the Supabase project URL.
+3. Replace `YOUR-PUBLIC-ANON-KEY` with the Supabase anon key. The anon key is intended for public clients; never put the service-role key here.
+4. Commit and push `config.js` with the public key. Never place a Supabase service-role or secret key anywhere in `employee-availability/`.
+
+The site uses only static HTML, CSS, JavaScript modules, the Supabase project URL, and a public publishable/anon key. It does not require Electron, Node.js, a local file, or a web server you manage.
+
+### Enable GitHub Pages
+
+These steps produce a URL in the form `https://ibahri1.github.io/Habaneros-scheduler-2.0/employee-availability/`:
+
+1. Push this project to the `main` branch of the `Habaneros-scheduler-2.0` GitHub repository.
+2. On GitHub, open the repository and select **Settings**.
+3. Select **Pages** under **Code and automation**.
+4. Under **Build and deployment**, choose **Deploy from a branch**.
+5. Select branch **main**, folder **/(root)**, then click **Save**.
+6. Wait for GitHub Pages to report that the site is live.
+7. Open `https://ibahri1.github.io/Habaneros-scheduler-2.0/employee-availability/` and test one employee code.
+
+Publishing from the repository root is intentional: the employee website remains in the `employee-availability/` subfolder, which creates the requested URL. The root `.nojekyll` file keeps GitHub Pages from altering the static assets.
+
+After future changes, commit and push to `main`. GitHub Pages automatically republishes the updated site; no manual upload is needed. Browser caching may take a minute, so refresh the page after deployment completes.
+
+Share only the employee-availability URL with employees.
+
+Employees enter only their four-digit code, choose one of the next four Sundays, select Monday through Sunday availability, and submit. Invalid codes receive a friendly message. Employees cannot select arbitrary dates or submit the same week twice.
+
+### Manager Workflow
+
+1. Click **Refresh** in Availability Submissions.
+2. Edit selected days and manager notes if necessary.
+3. Click **Apply** to copy those days to the linked local worker, **Mark Reviewed** to acknowledge without applying, or **Reject** to decline it.
+4. Use **Apply All** to apply every currently pending request at once.
+5. Use Availability History to filter completed records or permanently delete one after confirmation.
+6. Continue adjusting workers and schedules manually.
+
+Applying a submission changes only the worker's availability. It does not run the scheduling engine or alter the currently generated schedule.
+
+## Extending the Employee Website
+
+The static site keeps infrastructure and date helpers separate from the availability workflow:
+
+- `employee-availability/js/supabase.js` handles public Supabase RPC requests.
+- `employee-availability/js/weeks.js` handles allowed week calculations and display formatting.
+- `employee-availability/js/app.js` controls the current availability workflow.
+
+Future modules such as time-off requests, shift swaps, published schedules, and announcements can add their own HTML sections and JavaScript modules while reusing the Supabase and date helpers.
+
 ## Future SQLite Migration
 
 When the desktop app foundation is stable, add SQLite by replacing `src/main/database/database.ts` and `src/main/database/repository.ts`. Keep the same repository methods:
@@ -101,4 +187,3 @@ After running `npm run dev`, verify these workflows:
 8. Print Schedule: generate a schedule, click Print Schedule, and confirm the system print dialog appears. Try again with no schedule and confirm a friendly message appears.
 9. Export JSON/CSV: click each export button, choose a location, and confirm files are created.
 10. Import JSON/CSV: import a backup or CSV employee list and confirm duplicates are skipped with a summary.
-

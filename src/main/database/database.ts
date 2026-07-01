@@ -13,6 +13,10 @@ export function getWindowSettingsPath(): string {
   return path.join(getDataDirectory(), "window-settings.json");
 }
 
+export function getCloudSettingsPath(): string {
+  return path.join(getDataDirectory(), "cloud-settings.json");
+}
+
 export function closeDatabase(): void {
   // JSON storage does not keep open handles. This keeps the shutdown contract stable
   // for a future SQLite-backed repository.

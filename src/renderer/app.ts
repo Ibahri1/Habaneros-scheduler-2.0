@@ -1,5 +1,5 @@
 import { defaultAppState, defaultWorkerShiftTimes, normalizeWorker } from "../shared/defaults";
-import { DAYS, SHORT_DAYS, DayName, AppSettings, AppState, ExportFormat, ImportResult, ShiftSchedule, Worker, WorkerRole } from "../shared/types";
+import { DAYS, SHORT_DAYS, AvailabilitySubmission, CloudConfig, DayName, AppSettings, AppState, ExportFormat, ImportResult, ShiftSchedule, SubmissionStatus, Worker, WorkerRole } from "../shared/types";
 import { formatDate, formatDuration, formatTime, nextMonday } from "../shared/time";
 import { createWorker } from "./modules/employees/employees";
 import { toggleAvailability } from "./modules/availability/availability";
@@ -10,11 +10,14 @@ import { byId, escapeHtml } from "./shared/dom";
 
 let state: AppState = defaultAppState();
 let settings: AppSettings = { darkMode: false, confirmBeforeClose: true };
+let cloudConfig: CloudConfig = { supabaseUrl: "", anonKey: "" };
+let submissions: AvailabilitySubmission[] = [];
 
 const els = {
   availabilityChecks: byId<HTMLDivElement>("availabilityChecks"),
   workerForm: byId<HTMLFormElement>("workerForm"),
   workerName: byId<HTMLInputElement>("workerName"),
+  employeeCode: byId<HTMLInputElement>("employeeCode"),
   workerPosition: byId<HTMLInputElement>("workerPosition"),
   isManager: byId<HTMLSelectElement>("isManager"),
   maxWeeklyHours: byId<HTMLInputElement>("maxWeeklyHours"),
@@ -43,7 +46,22 @@ const els = {
   exportJsonBtn: byId<HTMLButtonElement>("exportJsonBtn"),
   exportCsvBtn: byId<HTMLButtonElement>("exportCsvBtn"),
   clearBtn: byId<HTMLButtonElement>("clearBtn"),
-  darkModeToggle: byId<HTMLInputElement>("darkModeToggle")
+  darkModeToggle: byId<HTMLInputElement>("darkModeToggle"),
+  cloudConfigForm: byId<HTMLFormElement>("cloudConfigForm"),
+  supabaseUrl: byId<HTMLInputElement>("supabaseUrl"),
+  supabaseAnonKey: byId<HTMLInputElement>("supabaseAnonKey"),
+  cloudStatus: byId<HTMLSpanElement>("cloudStatus"),
+  testCloudBtn: byId<HTMLButtonElement>("testCloudBtn"),
+  syncEmployeesBtn: byId<HTMLButtonElement>("syncEmployeesBtn"),
+  refreshSubmissionsBtn: byId<HTMLButtonElement>("refreshSubmissionsBtn"),
+  applyAllBtn: byId<HTMLButtonElement>("applyAllBtn"),
+  submissionCount: byId<HTMLSpanElement>("submissionCount"),
+  submissionsList: byId<HTMLDivElement>("submissionsList"),
+  historyCount: byId<HTMLSpanElement>("historyCount"),
+  historyEmployeeFilter: byId<HTMLSelectElement>("historyEmployeeFilter"),
+  historyWeekFilter: byId<HTMLSelectElement>("historyWeekFilter"),
+  historyStatusFilter: byId<HTMLSelectElement>("historyStatusFilter"),
+  historyList: byId<HTMLDivElement>("historyList")
 };
 
 void init();
@@ -52,6 +70,7 @@ async function init(): Promise<void> {
   try {
     state = await window.habanerosDesktop.loadState();
     settings = await window.habanerosDesktop.loadSettings();
+    cloudConfig = await window.habanerosDesktop.loadCloudConfig();
   } catch (error) {
     showError("The local data file could not be loaded. The app will start with an empty schedule.", error);
     state = defaultAppState();
@@ -61,6 +80,7 @@ async function init(): Promise<void> {
   state.workers = state.workers.map((worker) => normalizeWorker(worker, state.rules));
   applyTheme(settings);
   els.darkModeToggle.checked = settings.darkMode;
+  renderCloudConfig();
   renderAvailabilityInputs();
   renderStaffingInputs();
   bindEvents();
@@ -77,6 +97,12 @@ function bindEvents(): void {
   els.exportCsvBtn.addEventListener("click", () => void exportData("csv"));
   els.clearBtn.addEventListener("click", () => void clearData());
   els.darkModeToggle.addEventListener("change", () => void updateTheme());
+  els.cloudConfigForm.addEventListener("submit", (event) => void saveCloudConfig(event));
+  els.testCloudBtn.addEventListener("click", () => void testCloudConfig());
+  els.syncEmployeesBtn.addEventListener("click", () => void syncCloudEmployees());
+  els.refreshSubmissionsBtn.addEventListener("click", () => void refreshSubmissions());
+  els.applyAllBtn.addEventListener("click", () => void applyAllSubmissions());
+  [els.historyEmployeeFilter, els.historyWeekFilter, els.historyStatusFilter].forEach((filter) => filter.addEventListener("change", renderHistory));
   [els.weekStart, els.openShift, els.closeShift, els.shiftHours, els.mealBreakHours].forEach((input) => input.addEventListener("change", () => void rulesChanged()));
 }
 
@@ -107,8 +133,11 @@ async function addWorker(event: Event): Promise<void> {
   try {
     const availability = selectedAvailableDays();
     if (!els.workerName.value.trim()) { alert("Enter an employee name before saving."); return; }
+    if (!/^\d{4}$/.test(els.employeeCode.value)) { alert("Enter a valid 4-digit employee code."); return; }
+    if (state.workers.some((worker) => worker.employeeCode === els.employeeCode.value)) { alert("That employee code is already assigned."); return; }
     if (!availability.length) { alert("Please choose at least one available day."); return; }
     state.workers.push(createWorker({
+      employeeCode: els.employeeCode.value,
       name: els.workerName.value,
       position: els.workerPosition.value,
       isManager: els.isManager.value === "true",
@@ -157,7 +186,10 @@ function renderWorkers(): void {
   els.workersList.innerHTML = state.workers.map((worker) => {
     const openTime = worker.shiftTimes.open;
     const closeTime = worker.shiftTimes.close;
-    return '<article class="worker-card ' + (!worker.active ? 'inactive' : '') + '"><div class="worker-top"><div><h3>' + escapeHtml(worker.name) + '</h3><div class="meta">' + escapeHtml(worker.position) + (worker.isManager ? ' | Manager' : '') + ' | ' + worker.maxWeeklyHours + ' max hrs | ' + worker.preferredWeeklyHours + ' preferred</div></div><div class="card-actions"><button class="secondary" type="button" data-toggle-active="' + worker.id + '">' + (worker.active ? 'Deactivate' : 'Activate') + '</button><button class="secondary danger" type="button" data-delete="' + worker.id + '">Delete</button></div></div><div class="tag-row">' + (!worker.active ? '<span class="tag bad">Inactive</span>' : '') + (worker.canOpen ? '<span class="tag good">Can Open</span>' : '') + (worker.canClose ? '<span class="tag good">Can Close</span>' : '') + (worker.needsBreakFlag ? '<span class="tag warn">Lunch flag</span>' : '') + '</div><div class="meta">Open ' + formatTime(openTime.start) + '-' + formatTime(openTime.end) + ' | Close ' + formatTime(closeTime.start) + '-' + formatTime(closeTime.end) + '</div>' + (worker.notes ? '<div class="meta">Notes: ' + escapeHtml(worker.notes) + '</div>' : '') + '<div class="worker-days">' + DAYS.map((day, index) => '<span class="day-mini ' + (worker.availability.includes(day) ? 'on' : '') + '">' + SHORT_DAYS[index] + '</span>').join("") + '</div><div class="worker-edit"><label>Position <input data-edit="' + worker.id + '" data-field="position" type="text" value="' + escapeHtml(worker.position) + '"></label><label>Manager <select data-edit="' + worker.id + '" data-field="isManager"><option value="false" ' + selected(String(worker.isManager), 'false') + '>No</option><option value="true" ' + selected(String(worker.isManager), 'true') + '>Yes</option></select></label><label>Max weekly hours <input data-edit="' + worker.id + '" data-field="maxWeeklyHours" type="number" min="0" max="168" step="0.5" value="' + worker.maxWeeklyHours + '"></label><label>Preferred weekly hours <input data-edit="' + worker.id + '" data-field="preferredWeeklyHours" type="number" min="0" max="168" step="0.5" value="' + worker.preferredWeeklyHours + '"></label><label class="check-row"><input data-edit="' + worker.id + '" data-field="canOpen" type="checkbox" ' + checked(worker.canOpen) + '> Can Open</label><label class="check-row"><input data-edit="' + worker.id + '" data-field="canClose" type="checkbox" ' + checked(worker.canClose) + '> Can Close</label><label class="check-row full"><input data-edit="' + worker.id + '" data-field="needsBreakFlag" type="checkbox" ' + checked(worker.needsBreakFlag) + '> Lunch reminder</label><div class="full time-grid"><label>Open start <input data-shift-time="' + worker.id + '" data-shift="open" data-part="start" type="time" value="' + openTime.start + '"></label><label>Open end <input data-shift-time="' + worker.id + '" data-shift="open" data-part="end" type="time" value="' + openTime.end + '"></label><label>Close start <input data-shift-time="' + worker.id + '" data-shift="close" data-part="start" type="time" value="' + closeTime.start + '"></label><label>Close end <input data-shift-time="' + worker.id + '" data-shift="close" data-part="end" type="time" value="' + closeTime.end + '"></label></div><label class="full">Notes <textarea data-edit="' + worker.id + '" data-field="notes" rows="2">' + escapeHtml(worker.notes) + '</textarea></label><div class="full worker-days">' + DAYS.map((day, index) => '<label class="day-mini ' + (worker.availability.includes(day) ? 'on' : '') + '"><input data-edit-day="' + worker.id + '" value="' + day + '" type="checkbox" ' + checked(worker.availability.includes(day)) + '> ' + SHORT_DAYS[index] + '</label>').join("") + '</div></div></article>';
+    const tags = (!worker.active ? '<span class="tag bad">Inactive</span>' : '') + (worker.canOpen ? '<span class="tag good">Can Open</span>' : '') + (worker.canClose ? '<span class="tag good">Can Close</span>' : '') + (worker.needsBreakFlag ? '<span class="tag warn">Lunch flag</span>' : '');
+    const daySummary = DAYS.map((day, index) => '<span class="day-mini ' + (worker.availability.includes(day) ? 'on' : '') + '">' + SHORT_DAYS[index] + '</span>').join("");
+    const dayEditors = DAYS.map((day, index) => '<label class="day-mini ' + (worker.availability.includes(day) ? 'on' : '') + '"><input data-edit-day="' + worker.id + '" value="' + day + '" type="checkbox" ' + checked(worker.availability.includes(day)) + '> ' + SHORT_DAYS[index] + '</label>').join("");
+    return '<article class="worker-card ' + (!worker.active ? 'inactive' : '') + '"><div class="worker-top"><div><h3>' + escapeHtml(worker.name) + '</h3><div class="meta">Code ' + escapeHtml(worker.employeeCode || 'Not set') + ' | ' + escapeHtml(worker.position) + (worker.isManager ? ' | Manager' : '') + ' | ' + worker.maxWeeklyHours + ' max hrs | ' + worker.preferredWeeklyHours + ' preferred</div></div><div class="card-actions"><button class="secondary" type="button" data-toggle-active="' + worker.id + '">' + (worker.active ? 'Deactivate' : 'Activate') + '</button><button class="secondary danger" type="button" data-delete="' + worker.id + '">Delete</button></div></div><div class="tag-row">' + tags + '</div><div class="meta">Open ' + formatTime(openTime.start) + '-' + formatTime(openTime.end) + ' | Close ' + formatTime(closeTime.start) + '-' + formatTime(closeTime.end) + '</div>' + (worker.notes ? '<div class="meta">Notes: ' + escapeHtml(worker.notes) + '</div>' : '') + '<div class="worker-days">' + daySummary + '</div><div class="worker-edit"><label>Employee code <input data-edit="' + worker.id + '" data-field="employeeCode" type="text" inputmode="numeric" pattern="\\d{4}" maxlength="4" value="' + escapeHtml(worker.employeeCode) + '"></label><label>Position <input data-edit="' + worker.id + '" data-field="position" type="text" value="' + escapeHtml(worker.position) + '"></label><label>Manager <select data-edit="' + worker.id + '" data-field="isManager"><option value="false" ' + selected(String(worker.isManager), 'false') + '>No</option><option value="true" ' + selected(String(worker.isManager), 'true') + '>Yes</option></select></label><label>Max weekly hours <input data-edit="' + worker.id + '" data-field="maxWeeklyHours" type="number" min="0" max="168" step="0.5" value="' + worker.maxWeeklyHours + '"></label><label>Preferred weekly hours <input data-edit="' + worker.id + '" data-field="preferredWeeklyHours" type="number" min="0" max="168" step="0.5" value="' + worker.preferredWeeklyHours + '"></label><label class="check-row"><input data-edit="' + worker.id + '" data-field="canOpen" type="checkbox" ' + checked(worker.canOpen) + '> Can Open</label><label class="check-row"><input data-edit="' + worker.id + '" data-field="canClose" type="checkbox" ' + checked(worker.canClose) + '> Can Close</label><label class="check-row full"><input data-edit="' + worker.id + '" data-field="needsBreakFlag" type="checkbox" ' + checked(worker.needsBreakFlag) + '> Lunch reminder</label><div class="full time-grid"><label>Open start <input data-shift-time="' + worker.id + '" data-shift="open" data-part="start" type="time" value="' + openTime.start + '"></label><label>Open end <input data-shift-time="' + worker.id + '" data-shift="open" data-part="end" type="time" value="' + openTime.end + '"></label><label>Close start <input data-shift-time="' + worker.id + '" data-shift="close" data-part="start" type="time" value="' + closeTime.start + '"></label><label>Close end <input data-shift-time="' + worker.id + '" data-shift="close" data-part="end" type="time" value="' + closeTime.end + '"></label></div><label class="full">Notes <textarea data-edit="' + worker.id + '" data-field="notes" rows="2">' + escapeHtml(worker.notes) + '</textarea></label><div class="full worker-days">' + dayEditors + '</div></div></article>';
   }).join("");
 
   els.workersList.querySelectorAll<HTMLButtonElement>("[data-toggle-active]").forEach((button) => button.addEventListener("click", () => void toggleWorkerActive(button.dataset.toggleActive!)));
@@ -191,6 +223,11 @@ async function editWorker(input: HTMLInputElement | HTMLSelectElement | HTMLText
   const worker = findWorker(input.dataset.edit || "");
   if (!worker) return;
   switch (input.dataset.field) {
+    case "employeeCode":
+      if (!/^\d{4}$/.test(input.value)) { alert("Employee code must contain exactly 4 digits."); renderWorkers(); return; }
+      if (state.workers.some((item) => item.id !== worker.id && item.employeeCode === input.value)) { alert("That employee code is already assigned."); renderWorkers(); return; }
+      worker.employeeCode = input.value;
+      break;
     case "position": worker.position = input.value || "Crew"; worker.role = worker.isManager ? "Manager" : "Crew"; break;
     case "isManager": worker.isManager = input.value === "true"; worker.role = worker.isManager ? "Manager" : "Crew"; break;
     case "maxWeeklyHours": worker.maxWeeklyHours = Number(input.value) || 0; break;
@@ -327,7 +364,7 @@ function importCsv(content: string): ImportResult {
     const get = (name: string) => row[headers.indexOf(name)] || "";
     const name = get("name") || get("employee name");
     if (!name.trim()) { skipped++; continue; }
-    const worker = normalizeWorker({ id: crypto.randomUUID(), name, position: get("position") || "Crew", role: yes(get("manager")) ? "Manager" : "Crew", isManager: yes(get("manager")), maxWeeklyHours: Number(get("max weekly hours")) || 40, preferredWeeklyHours: Number(get("preferred weekly hours")) || 32, maxDays: 7, canOpen: yes(get("can open")), canClose: yes(get("can close")), needsBreakFlag: true, active: !no(get("active")), notes: get("notes"), availability: splitDays(get("available days")), shiftTimes: defaultWorkerShiftTimes(state.rules) }, state.rules);
+    const worker = normalizeWorker({ id: crypto.randomUUID(), employeeCode: get("employee code"), name, position: get("position") || "Crew", role: yes(get("manager")) ? "Manager" : "Crew", isManager: yes(get("manager")), maxWeeklyHours: Number(get("max weekly hours")) || 40, preferredWeeklyHours: Number(get("preferred weekly hours")) || 32, maxDays: 7, canOpen: yes(get("can open")), canClose: yes(get("can close")), needsBreakFlag: true, active: !no(get("active")), notes: get("notes"), availability: splitDays(get("available days")), shiftTimes: defaultWorkerShiftTimes(state.rules) }, state.rules);
     if (mergeWorker(worker)) imported++; else skipped++;
   }
   return { imported, skipped, messages: skipped ? [String(skipped) + " duplicate or invalid row(s) skipped."] : [] };
@@ -336,6 +373,7 @@ function importCsv(content: string): ImportResult {
 function mergeWorker(worker: Worker): boolean {
   const key = worker.name.trim().toLowerCase();
   if (state.workers.some((existing) => existing.name.trim().toLowerCase() === key)) return false;
+  if (worker.employeeCode && state.workers.some((existing) => existing.employeeCode === worker.employeeCode)) return false;
   state.workers.push(worker);
   state.schedule = null;
   return true;
@@ -363,6 +401,163 @@ function parseCsv(content: string): string[][] {
 function yes(value: string): boolean { return ["yes", "true", "1", "y"].includes(value.trim().toLowerCase()); }
 function no(value: string): boolean { return ["no", "false", "0", "n", "inactive"].includes(value.trim().toLowerCase()); }
 function splitDays(value: string): DayName[] { const parts = value.split(/[;,|]/).map((item) => item.trim().toLowerCase()); return DAYS.filter((day) => parts.includes(day.toLowerCase()) || parts.includes(day.slice(0, 3).toLowerCase())); }
+
+function renderCloudConfig(): void {
+  els.supabaseUrl.value = cloudConfig.supabaseUrl;
+  els.supabaseAnonKey.value = cloudConfig.anonKey;
+  els.cloudStatus.textContent = cloudConfig.supabaseUrl && cloudConfig.anonKey ? "Configured" : "Not configured";
+}
+
+function readCloudConfigForm(): CloudConfig {
+  return { supabaseUrl: els.supabaseUrl.value.trim().replace(/\/$/, ""), anonKey: els.supabaseAnonKey.value.trim() };
+}
+
+async function saveCloudConfig(event: Event): Promise<void> {
+  event.preventDefault();
+  try {
+    cloudConfig = await window.habanerosDesktop.saveCloudConfig(readCloudConfigForm());
+    renderCloudConfig();
+    alert("Supabase settings saved.");
+  } catch (error) { showError("Supabase settings could not be saved.", error); }
+}
+
+async function testCloudConfig(): Promise<void> {
+  try {
+    const config = readCloudConfigForm();
+    const result = await window.habanerosDesktop.testCloudConfig(config);
+    els.cloudStatus.textContent = "Connected";
+    alert(result.message);
+  } catch (error) { els.cloudStatus.textContent = "Connection failed"; showError("Supabase connection failed.", error); }
+}
+
+async function syncCloudEmployees(): Promise<void> {
+  try {
+    cloudConfig = await window.habanerosDesktop.saveCloudConfig(readCloudConfigForm());
+    const missingCodes = state.workers.filter((worker) => !/^\d{4}$/.test(worker.employeeCode));
+    if (missingCodes.length) { alert("Add a 4-digit code for every employee before syncing. Missing: " + missingCodes.map((worker) => worker.name).join(", ")); return; }
+    const result = await window.habanerosDesktop.syncCloudEmployees(state.workers);
+    els.cloudStatus.textContent = "Employees synced";
+    alert(result.message);
+  } catch (error) { showError("Employees could not be synced.", error); }
+}
+
+async function refreshSubmissions(): Promise<void> {
+  try {
+    submissions = await window.habanerosDesktop.listAvailabilitySubmissions(null);
+    renderSubmissions();
+    renderHistoryFilters();
+    renderHistory();
+  } catch (error) { showError("Availability submissions could not be loaded. The local scheduler is still available.", error); }
+}
+
+function renderSubmissions(): void {
+  const pending = submissions.filter((submission) => submission.status === "pending");
+  els.submissionCount.textContent = pending.length + " pending";
+  els.applyAllBtn.disabled = pending.length === 0;
+  if (!pending.length) { els.submissionsList.innerHTML = '<div class="empty-state">No pending availability submissions.</div>'; return; }
+  els.submissionsList.innerHTML = pending.map((submission) => '<article class="submission-row"><div><strong>' + escapeHtml(submission.employeeName) + '</strong><div class="meta">Week of ' + formatWeek(submission.weekStart) + '</div><div class="status-line">Submitted ' + formatSubmittedAt(submission.submittedAt) + '</div></div><div class="submission-days">' + DAYS.map((day, index) => '<label class="day-mini ' + (submission.availableDays.includes(day) ? 'on' : '') + '"><input data-submission-day="' + submission.id + '" value="' + day + '" type="checkbox" ' + checked(submission.availableDays.includes(day)) + '> ' + SHORT_DAYS[index] + '</label>').join("") + '</div><div class="submission-actions"><button class="primary" data-submission-action="apply" data-submission-id="' + submission.id + '" type="button">Apply</button><button class="secondary" data-submission-action="reviewed" data-submission-id="' + submission.id + '" type="button">Mark Reviewed</button><button class="secondary danger" data-submission-action="rejected" data-submission-id="' + submission.id + '" type="button">Reject</button></div><label class="submission-notes">Manager Notes <textarea data-submission-notes="' + submission.id + '" rows="2" maxlength="1000" placeholder="Optional notes">' + escapeHtml(submission.managerNotes) + '</textarea></label></article>').join("");
+  els.submissionsList.querySelectorAll<HTMLInputElement>("[data-submission-day]").forEach((input) => input.addEventListener("change", () => editSubmissionDay(input)));
+  els.submissionsList.querySelectorAll<HTMLTextAreaElement>("[data-submission-notes]").forEach((input) => input.addEventListener("input", () => editSubmissionNotes(input)));
+  els.submissionsList.querySelectorAll<HTMLButtonElement>("[data-submission-action]").forEach((button) => button.addEventListener("click", () => void handleSubmission(button)));
+}
+
+function editSubmissionDay(input: HTMLInputElement): void {
+  const submission = submissions.find((item) => item.id === input.dataset.submissionDay);
+  if (!submission) return;
+  submission.availableDays = toggleAvailability(submission.availableDays, input.value as DayName, input.checked);
+  renderSubmissions();
+}
+
+function editSubmissionNotes(input: HTMLTextAreaElement): void {
+  const submission = submissions.find((item) => item.id === input.dataset.submissionNotes);
+  if (submission) submission.managerNotes = input.value;
+}
+
+async function handleSubmission(button: HTMLButtonElement): Promise<void> {
+  const submission = submissions.find((item) => item.id === button.dataset.submissionId);
+  if (!submission) return;
+  const action = button.dataset.submissionAction as "apply" | "reviewed" | "rejected";
+  try {
+    if (action === "apply") {
+      const worker = findWorker(submission.localWorkerId);
+      if (!worker) { alert("This submission is not linked to a local employee. Sync employees and try again."); return; }
+      worker.availability = [...submission.availableDays];
+      await saveState();
+    }
+    const status: SubmissionStatus = action === "apply" ? "applied" : action;
+    await window.habanerosDesktop.updateAvailabilitySubmission({ id: submission.id, availableDays: submission.availableDays, status, managerNotes: submission.managerNotes });
+    submission.status = status;
+    submission.actionAt = new Date().toISOString();
+    renderWorkers();
+    renderSubmissions();
+    renderHistoryFilters();
+    renderHistory();
+  } catch (error) { showError("The submission could not be updated.", error); }
+}
+
+async function applyAllSubmissions(): Promise<void> {
+  const pending = submissions.filter((submission) => submission.status === "pending");
+  if (!pending.length) return;
+  const missing = pending.filter((submission) => !findWorker(submission.localWorkerId));
+  if (missing.length) { alert("These submissions are not linked to local employees: " + missing.map((item) => item.employeeName).join(", ") + ". Sync employees and try again."); return; }
+  if (!confirm("Apply all " + pending.length + " pending availability submissions?")) return;
+  try {
+    for (const submission of pending) {
+      await window.habanerosDesktop.updateAvailabilitySubmission({ id: submission.id, availableDays: submission.availableDays, status: "applied", managerNotes: submission.managerNotes });
+    }
+    for (const submission of pending) {
+      const worker = findWorker(submission.localWorkerId)!;
+      worker.availability = [...submission.availableDays];
+      submission.status = "applied";
+      submission.actionAt = new Date().toISOString();
+    }
+    await saveState();
+    renderWorkers();
+    renderSubmissions();
+    renderHistoryFilters();
+    renderHistory();
+  } catch (error) { showError("Not every submission could be applied. Refresh the inbox before trying again.", error); }
+}
+
+function renderHistoryFilters(): void {
+  const history = submissions.filter((submission) => submission.status !== "pending");
+  const employeeValue = els.historyEmployeeFilter.value;
+  const weekValue = els.historyWeekFilter.value;
+  const employees = [...new Set(history.map((submission) => submission.employeeName))].sort();
+  const weeks = [...new Set(history.map((submission) => submission.weekStart))].sort().reverse();
+  els.historyEmployeeFilter.innerHTML = '<option value="">All employees</option>' + employees.map((name) => '<option value="' + escapeHtml(name) + '">' + escapeHtml(name) + '</option>').join("");
+  els.historyWeekFilter.innerHTML = '<option value="">All weeks</option>' + weeks.map((week) => '<option value="' + week + '">Week of ' + formatWeek(week) + '</option>').join("");
+  els.historyEmployeeFilter.value = employees.includes(employeeValue) ? employeeValue : "";
+  els.historyWeekFilter.value = weeks.includes(weekValue) ? weekValue : "";
+}
+
+function renderHistory(): void {
+  const history = submissions.filter((submission) => submission.status !== "pending" && (!els.historyEmployeeFilter.value || submission.employeeName === els.historyEmployeeFilter.value) && (!els.historyWeekFilter.value || submission.weekStart === els.historyWeekFilter.value) && (!els.historyStatusFilter.value || submission.status === els.historyStatusFilter.value));
+  els.historyCount.textContent = history.length + " record" + (history.length === 1 ? "" : "s");
+  if (!history.length) { els.historyList.innerHTML = '<div class="empty-state">No history records match these filters.</div>'; return; }
+  els.historyList.innerHTML = history.map((submission) => '<article class="history-row"><div><strong>' + escapeHtml(submission.employeeName) + '</strong><div class="meta">Week of ' + formatWeek(submission.weekStart) + '</div><span class="tag ' + (submission.status === 'rejected' ? 'bad' : 'good') + '">' + escapeHtml(submission.status) + '</span></div><div class="history-details"><span>Submitted: ' + formatSubmittedAt(submission.submittedAt) + '</span><span>Action: ' + (submission.actionAt ? formatSubmittedAt(submission.actionAt) : 'Not recorded') + '</span><span>Manager Notes: ' + (submission.managerNotes ? escapeHtml(submission.managerNotes) : 'None') + '</span></div><button class="secondary danger" data-history-delete="' + submission.id + '" type="button">Delete Permanently</button></article>').join("");
+  els.historyList.querySelectorAll<HTMLButtonElement>("[data-history-delete]").forEach((button) => button.addEventListener("click", () => void deleteHistorySubmission(button.dataset.historyDelete!)));
+}
+
+async function deleteHistorySubmission(id: string): Promise<void> {
+  if (!confirm("Are you sure?")) return;
+  try {
+    await window.habanerosDesktop.deleteAvailabilitySubmission(id);
+    submissions = submissions.filter((submission) => submission.id !== id);
+    renderHistoryFilters();
+    renderHistory();
+  } catch (error) { showError("The history record could not be deleted.", error); }
+}
+
+function formatSubmittedAt(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
+function formatWeek(value: string): string {
+  const date = new Date(value + "T12:00:00");
+  return Number.isNaN(date.getTime()) ? escapeHtml(value) : date.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
+}
 
 async function clearData(): Promise<void> {
   if (!confirm("Clear all workers, rules, and generated schedules?")) return;

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src https://*.supabase.co; object-src 'none'; base-uri 'none'; form-action 'self'">
+  <title>Habaneros Availability</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main>
+    <header><p>Habaneros Mexican Grill</p><h1>Weekly Availability</h1></header>
+    <section id="loginPanel">
+      <form id="codeForm">
+        <label for="employeeCode">4-digit employee code</label>
+        <input id="employeeCode" type="password" inputmode="numeric" pattern="\d{4}" maxlength="4" autocomplete="one-time-code" required>
+        <button type="submit">Continue</button>
+      </form>
+    </section>
+    <section id="availabilityPanel" hidden>
+      <div class="welcome">Welcome, <strong id="employeeName"></strong></div>
+      <form id="availabilityForm">
+        <label for="weekStart">Week</label>
+        <select id="weekStart" required></select>
+        <fieldset><legend>Days you are available</legend><div id="days" class="days"></div></fieldset>
+        <button type="submit">Submit Availability</button>
+        <button id="startOver" class="secondary" type="button">Use a different code</button>
+      </form>
+    </section>
+    <section id="successPanel" class="success-panel" hidden>
+      <div class="success-check" aria-hidden="true">&#10003;</div>
+      <h2>Availability Submitted Successfully</h2>
+      <p>Your manager has received your availability for:</p>
+      <strong id="successWeek"></strong>
+      <p>Thank you.</p>
+      <button id="submitAnother" type="button">Submit Another Week</button>
+    </section>
+    <div id="message" role="status" aria-live="polite"></div>
+  </main>
+  <script src="config.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

@@ -1,11 +1,14 @@
 import { BrowserWindow, dialog, ipcMain } from "electron";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { SchedulerRepository } from "../database/repository";
-import { appSettingsSchema, appStateSchema } from "../../shared/validation";
-import { ExportPayload } from "../../shared/types";
+import { CloudConfigRepository, SchedulerRepository } from "../database/repository";
+import { appSettingsSchema, appStateSchema, cloudConfigSchema, submissionDeleteSchema, submissionStatusSchema, submissionUpdateSchema } from "../../shared/validation";
+import { CloudConfig, ExportPayload, Worker } from "../../shared/types";
+import { AvailabilityService } from "../cloud/availabilityService";
 
 const repository = new SchedulerRepository();
+const cloudConfigRepository = new CloudConfigRepository();
+const availabilityService = new AvailabilityService();
 let dirtyState = false;
 
 export function registerSchedulerIpc(): void {
@@ -34,6 +37,29 @@ export function registerSchedulerIpc(): void {
   ipcMain.handle("schedule:print", async (_event, html: string) => printSchedule(html));
   ipcMain.handle("data:export", async (_event, payload: ExportPayload) => exportData(payload));
   ipcMain.handle("data:import", async () => importData());
+  ipcMain.handle("cloud:config:load", () => cloudConfigRepository.load());
+  ipcMain.handle("cloud:config:save", (_event, input) => cloudConfigRepository.save(cloudConfigSchema.parse(input) as CloudConfig));
+  ipcMain.handle("cloud:test", async (_event, input) => {
+    const config = cloudConfigSchema.parse(input) as CloudConfig;
+    await availabilityService.test(config);
+    return { success: true, message: "Connected to Supabase." };
+  });
+  ipcMain.handle("cloud:employees:sync", async (_event, workers: Worker[]) => {
+    const parsed = appStateSchema.shape.workers.parse(workers) as Worker[];
+    const count = await availabilityService.syncEmployees(cloudConfigRepository.load(), parsed);
+    return { success: true, message: count + " employee" + (count === 1 ? "" : "s") + " synced." };
+  });
+  ipcMain.handle("cloud:submissions:list", (_event, status) => availabilityService.list(cloudConfigRepository.load(), status === null ? null : submissionStatusSchema.parse(status)));
+  ipcMain.handle("cloud:submissions:update", async (_event, input) => {
+    const update = submissionUpdateSchema.parse(input);
+    await availabilityService.update(cloudConfigRepository.load(), update.id, update.availableDays, update.status, update.managerNotes);
+    return { success: true, message: "Submission updated." };
+  });
+  ipcMain.handle("cloud:submissions:delete", async (_event, input) => {
+    const deletion = submissionDeleteSchema.parse(input);
+    await availabilityService.delete(cloudConfigRepository.load(), deletion.id);
+    return { success: true, message: "Submission permanently deleted." };
+  });
 }
 
 async function printSchedule(html: string): Promise<{ success: boolean; message: string }> {
@@ -75,9 +101,9 @@ async function importData(): Promise<{ canceled: boolean; fileName?: string; con
 }
 
 function toCsv(payload: ExportPayload): string {
-  const rows = [["Name", "Position", "Manager", "Can Open", "Can Close", "Active", "Max Weekly Hours", "Preferred Weekly Hours", "Available Days", "Notes"]];
+  const rows = [["Name", "Employee Code", "Position", "Manager", "Can Open", "Can Close", "Active", "Max Weekly Hours", "Preferred Weekly Hours", "Available Days", "Notes"]];
   for (const worker of payload.state.workers) {
-    rows.push([worker.name, worker.position, worker.isManager ? "Yes" : "No", worker.canOpen ? "Yes" : "No", worker.canClose ? "Yes" : "No", worker.active ? "Yes" : "No", String(worker.maxWeeklyHours), String(worker.preferredWeeklyHours), worker.availability.join(";"), worker.notes]);
+    rows.push([worker.name, worker.employeeCode, worker.position, worker.isManager ? "Yes" : "No", worker.canOpen ? "Yes" : "No", worker.canClose ? "Yes" : "No", worker.active ? "Yes" : "No", String(worker.maxWeeklyHours), String(worker.preferredWeeklyHours), worker.availability.join(";"), worker.notes]);
   }
   return rows.map((row) => row.map(csvCell).join(",")).join("\n");
 }

@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.3.0 - 2026-07-01
+
+- Replaced arbitrary employee date entry with a dropdown containing only the next four Sundays.
+- Added server-side Sunday and four-week validation with one immutable submission per employee and week.
+- Added the dedicated phone success screen and surfaced Supabase validation messages.
+- Changed the manager inbox to show pending requests only and remove acted-on requests immediately.
+- Added Apply All without invoking or modifying schedule generation.
+- Added Availability History with employee, week, status, submission date, action date, manager notes, and filters.
+- Added confirmed permanent deletion for non-pending history records.
+- Modularized the static employee site for GitHub Pages and future employee-facing features.
+- Added an exact Supabase migration for existing installations.
+
+## 1.2.2 - 2026-06-30
+
+- Added automatic cleanup of obsolete fields from existing cloud settings files.
+- Confirmed Phase 1 Supabase settings contain only the project URL and public anon key.
+
+## 1.2.1 - 2026-06-30
+
+- Removed the unsupported manager sync key from Phase 1 Supabase configuration and RPC calls.
+- Updated employee sync and availability review RPC signatures to use the Supabase URL and public anon key only.
+- Added SQL cleanup for the previous keyed function overloads.
+
+## 1.2.0 - 2026-06-30
+
+- Added unique four-digit employee codes to worker creation, editing, import, export, and local JSON persistence.
+- Added local Supabase URL and anon key configuration without replacing offline JSON storage.
+- Added employee roster sync and manual availability submission review, editing, apply, reviewed, and reject actions.
+- Added a mobile-friendly employee availability form for weekly day selection.
+- Added a Supabase SQL schema with protected tables, employee-code lookup, submissions, and manager RPC operations.
+- Kept cloud submissions separate from schedule generation; applying availability never generates or overwrites a schedule.
+
 ## 1.1.0 - 2026-06-30
 
 - Implemented Electron native schedule printing with a clean print layout and friendly no-schedule message.

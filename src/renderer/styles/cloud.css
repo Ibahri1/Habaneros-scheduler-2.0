@@ -1,0 +1,35 @@
+.cloud-config-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  align-items: end;
+}
+
+.cloud-actions { grid-column: 1 / -1; }
+.submissions-list { display: grid; gap: 10px; }
+
+.submission-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(300px, 2fr) auto;
+  gap: 14px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.submission-days, .submission-actions { display: flex; gap: 7px; flex-wrap: wrap; }
+.submission-days .day-mini { cursor: pointer; }
+.submission-actions { justify-content: flex-end; }
+.status-line { margin-top: 6px; color: var(--muted); font-size: .84rem; }
+.status-error { color: var(--bad); }
+.submission-notes { grid-column: 1 / -1; }
+.history-filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.history-list { display: grid; gap: 10px; }
+.history-row { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(210px, 1.5fr) auto; gap: 14px; align-items: center; border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
+.history-details { display: grid; gap: 4px; }
+
+@media (max-width: 860px) {
+  .cloud-config-grid, .submission-row, .history-filters, .history-row { grid-template-columns: 1fr; }
+  .submission-actions { justify-content: flex-start; }
+}

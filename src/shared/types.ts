@@ -5,12 +5,14 @@ export type DayName = typeof DAYS[number];
 export type ShiftName = "open" | "close";
 export type WorkerRole = "Crew" | "Lead" | "Manager";
 export type ExportFormat = "json" | "csv";
+export type SubmissionStatus = "pending" | "reviewed" | "applied" | "rejected";
 
 export interface ShiftTime { start: string; end: string; }
 export interface WorkerShiftTimes { open: ShiftTime; close: ShiftTime; }
 
 export interface Worker {
   id: string;
+  employeeCode: string;
   name: string;
   position: string;
   role: WorkerRole;
@@ -69,6 +71,20 @@ export interface DaySchedule {
 export interface GeneratedSchedule { createdAt: string; days: DaySchedule[]; }
 export interface AppState { workers: Worker[]; rules: ScheduleRules; schedule: GeneratedSchedule | null; }
 export interface AppSettings { darkMode: boolean; confirmBeforeClose: boolean; }
+export interface CloudConfig { supabaseUrl: string; anonKey: string; }
+export interface AvailabilitySubmission {
+  id: string;
+  employeeId: string;
+  localWorkerId: string;
+  employeeName: string;
+  weekStart: string;
+  availableDays: DayName[];
+  submittedAt: string;
+  status: SubmissionStatus;
+  actionAt: string | null;
+  managerNotes: string;
+}
+export interface CloudResult { success: boolean; message: string; }
 export interface WindowBounds { width: number; height: number; x?: number; y?: number; }
 
 export interface ImportResult {

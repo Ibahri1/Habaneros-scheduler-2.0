@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import { AppSettings, AppState, ExportPayload } from "../shared/types";
+import { AppSettings, AppState, AvailabilitySubmission, CloudConfig, CloudResult, DayName, ExportPayload, SubmissionStatus, Worker } from "../shared/types";
 
 const api = {
   loadState: (): Promise<AppState> => ipcRenderer.invoke("scheduler:load"),
@@ -10,7 +10,14 @@ const api = {
   confirmClose: (): Promise<boolean> => ipcRenderer.invoke("app:confirmClose"),
   printSchedule: (html: string): Promise<{ success: boolean; message: string }> => ipcRenderer.invoke("schedule:print", html),
   exportData: (payload: ExportPayload): Promise<{ success: boolean; message: string }> => ipcRenderer.invoke("data:export", payload),
-  importData: (): Promise<{ canceled: boolean; fileName?: string; content?: string }> => ipcRenderer.invoke("data:import")
+  importData: (): Promise<{ canceled: boolean; fileName?: string; content?: string }> => ipcRenderer.invoke("data:import"),
+  loadCloudConfig: (): Promise<CloudConfig> => ipcRenderer.invoke("cloud:config:load"),
+  saveCloudConfig: (config: CloudConfig): Promise<CloudConfig> => ipcRenderer.invoke("cloud:config:save", config),
+  testCloudConfig: (config: CloudConfig): Promise<CloudResult> => ipcRenderer.invoke("cloud:test", config),
+  syncCloudEmployees: (workers: Worker[]): Promise<CloudResult> => ipcRenderer.invoke("cloud:employees:sync", workers),
+  listAvailabilitySubmissions: (status: SubmissionStatus | null): Promise<AvailabilitySubmission[]> => ipcRenderer.invoke("cloud:submissions:list", status),
+  updateAvailabilitySubmission: (input: { id: string; availableDays: DayName[]; status: SubmissionStatus; managerNotes: string }): Promise<CloudResult> => ipcRenderer.invoke("cloud:submissions:update", input),
+  deleteAvailabilitySubmission: (id: string): Promise<CloudResult> => ipcRenderer.invoke("cloud:submissions:delete", { id })
 };
 
 contextBridge.exposeInMainWorld("habanerosDesktop", api);
