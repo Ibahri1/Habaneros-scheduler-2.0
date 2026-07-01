@@ -3,7 +3,7 @@ export const SHORT_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as c
 
 export type DayName = typeof DAYS[number];
 export type ShiftName = "open" | "close";
-export type WorkerRole = "Crew" | "Lead" | "Manager";
+export type WorkerRole = "Crew" | "Lead";
 export type ExportFormat = "json" | "csv";
 export type SubmissionStatus = "pending" | "reviewed" | "applied" | "rejected";
 

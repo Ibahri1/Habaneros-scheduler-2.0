@@ -1,11 +1,17 @@
 # Changelog
 
+## 1.3.1 - 2026-07-01
+
+- Changed Clear so it removes only the generated schedule while preserving employees, availability, codes, submissions, and settings.
+- Replaced employee-role terminology from Manager to Lead across worker forms, schedule output, warnings, printing, CSV exports, and documentation.
+- Added compatibility normalization so existing Manager role records load and save as Lead records.
+
 ## 1.3.0 - 2026-07-01
 
 - Replaced arbitrary employee date entry with a dropdown containing only the next four Sundays.
 - Added server-side Sunday and four-week validation with one immutable submission per employee and week.
 - Added the dedicated phone success screen and surfaced Supabase validation messages.
-- Changed the manager inbox to show pending requests only and remove acted-on requests immediately.
+- Changed the lead inbox to show pending requests only and remove acted-on requests immediately.
 - Added Apply All without invoking or modifying schedule generation.
 - Added Availability History with employee, week, status, submission date, action date, manager notes, and filters.
 - Added confirmed permanent deletion for non-pending history records.
@@ -37,10 +43,10 @@
 - Implemented Electron native schedule printing with a clean print layout and friendly no-schedule message.
 - Implemented immediate dark mode switching with saved/restored preference.
 - Fixed available day rendering and persistence for all seven days.
-- Expanded worker records with position, manager status, max/preferred weekly hours, notes, active status, and shift permissions.
+- Expanded worker records with position, lead status, max/preferred weekly hours, notes, active status, and shift permissions.
 - Implemented add, edit, delete, and deactivate/activate worker flows.
-- Rebuilt the schedule generator to respect availability, manager coverage, opening/closing permissions, active status, maximum weekly hours, and fair hour balancing.
-- Added warning output for missing managers, unavailable employees, not enough employees, and unfilled shifts.
+- Rebuilt the schedule generator to respect availability, lead coverage, opening/closing permissions, active status, maximum weekly hours, and fair hour balancing.
+- Added warning output for missing leads, unavailable employees, not enough employees, and unfilled shifts.
 - Implemented JSON and CSV import with duplicate prevention and import summaries.
 - Implemented JSON and CSV export with Electron save dialogs.
 - Added user-facing error handling for all major actions.

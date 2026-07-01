@@ -31,7 +31,7 @@ export function defaultWorkerShiftTimes(rules: ScheduleRules): WorkerShiftTimes 
 }
 
 function normalizeRole(role: unknown, position: string, isManager: boolean): WorkerRole {
-  if (role === "Manager" || isManager) return "Manager";
+  if (role === "Manager" || role === "Lead" || isManager) return "Lead";
   if (role === "Lead") return "Lead";
   if (position.toLowerCase().includes("lead")) return "Lead";
   return "Crew";
@@ -39,8 +39,9 @@ function normalizeRole(role: unknown, position: string, isManager: boolean): Wor
 
 export function normalizeWorker(worker: Partial<Worker> & { id: string; name: string }, rules: ScheduleRules): Worker {
   const defaults = defaultWorkerShiftTimes(rules);
-  const position = String(worker.position || worker.role || "Crew");
-  const isManager = Boolean(worker.isManager || worker.role === "Manager");
+  const rawPosition = String(worker.position || worker.role || "Crew");
+  const position = rawPosition.toLowerCase() === "manager" ? "Lead" : rawPosition;
+  const isManager = Boolean(worker.isManager || String(worker.role) === "Manager" || worker.role === "Lead");
   const role = normalizeRole(worker.role, position, isManager);
   const maxWeeklyHours = Number(worker.maxWeeklyHours || 40);
   return {
@@ -49,7 +50,7 @@ export function normalizeWorker(worker: Partial<Worker> & { id: string; name: st
     name: String(worker.name || "Unnamed Worker"),
     position,
     role,
-    isManager: role === "Manager" || isManager,
+    isManager: role === "Lead" || isManager,
     maxWeeklyHours,
     preferredWeeklyHours: Number(worker.preferredWeeklyHours || Math.min(maxWeeklyHours, 32)),
     maxDays: Number(worker.maxDays || 7),

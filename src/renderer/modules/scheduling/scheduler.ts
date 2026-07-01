@@ -56,9 +56,9 @@ function buildShift(state: AppState, day: DayName, shiftName: ShiftName, stats: 
   const eligible = () => state.workers.filter((worker) => canWork(worker, day, shiftName, stats, assignedToday));
 
   if (needed > 0) {
-    const manager = rankWorkers(eligible().filter((worker) => worker.isManager), stats)[0];
-    if (manager) assign(manager, shiftName, assigned, stats, assignedToday);
-    else warnings.push("Missing manager for " + day + " " + shiftName + ".");
+    const lead = rankWorkers(eligible().filter((worker) => worker.isManager), stats)[0];
+    if (lead) assign(lead, shiftName, assigned, stats, assignedToday);
+    else warnings.push("Missing lead for " + day + " " + shiftName + ".");
   }
 
   if (assigned.length < needed) {

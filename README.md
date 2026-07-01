@@ -133,7 +133,7 @@ Share only the employee-availability URL with employees.
 
 Employees enter only their four-digit code, choose one of the next four Sundays, select Monday through Sunday availability, and submit. Invalid codes receive a friendly message. Employees cannot select arbitrary dates or submit the same week twice.
 
-### Manager Workflow
+### Lead Workflow
 
 1. Click **Refresh** in Availability Submissions.
 2. Edit selected days and manager notes if necessary.
@@ -179,11 +179,12 @@ After running `npm run dev`, verify these workflows:
 
 1. Dark Mode: toggle Dark Mode in the header, close the app, reopen it, and confirm the theme is restored.
 2. Available Days: add a worker with selected days, reopen the app, and confirm the same days are selected/displayed.
-3. Add Worker: enter name, position, manager status, opening/closing permissions, max/preferred hours, notes, availability, and shift times. Confirm the worker appears immediately.
-4. Edit Worker: change position, manager status, hours, permissions, notes, availability, and shift times from the worker card. Confirm changes persist after restart.
+3. Add Worker: enter name, position, lead status, opening/closing permissions, max/preferred hours, notes, availability, and shift times. Confirm the worker appears immediately.
+4. Edit Worker: change position, lead status, hours, permissions, notes, availability, and shift times from the worker card. Confirm changes persist after restart.
 5. Deactivate Worker: click Deactivate and confirm the worker remains visible but is not scheduled. Click Activate to restore.
 6. Delete Worker: delete a worker and confirm it is removed after restart.
 7. Generate Schedule: add employees with different availability and permissions, generate a schedule, and review any warnings.
 8. Print Schedule: generate a schedule, click Print Schedule, and confirm the system print dialog appears. Try again with no schedule and confirm a friendly message appears.
 9. Export JSON/CSV: click each export button, choose a location, and confirm files are created.
 10. Import JSON/CSV: import a backup or CSV employee list and confirm duplicates are skipped with a summary.
+11. Clear Schedule: generate a schedule, click Clear, and confirm only the generated schedule is removed. Confirm employees, availability, employee codes, cloud submissions, and settings remain unchanged.

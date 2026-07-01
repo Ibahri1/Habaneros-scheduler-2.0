@@ -101,7 +101,7 @@ async function importData(): Promise<{ canceled: boolean; fileName?: string; con
 }
 
 function toCsv(payload: ExportPayload): string {
-  const rows = [["Name", "Employee Code", "Position", "Manager", "Can Open", "Can Close", "Active", "Max Weekly Hours", "Preferred Weekly Hours", "Available Days", "Notes"]];
+  const rows = [["Name", "Employee Code", "Position", "Lead", "Can Open", "Can Close", "Active", "Max Weekly Hours", "Preferred Weekly Hours", "Available Days", "Notes"]];
   for (const worker of payload.state.workers) {
     rows.push([worker.name, worker.employeeCode, worker.position, worker.isManager ? "Yes" : "No", worker.canOpen ? "Yes" : "No", worker.canClose ? "Yes" : "No", worker.active ? "Yes" : "No", String(worker.maxWeeklyHours), String(worker.preferredWeeklyHours), worker.availability.join(";"), worker.notes]);
   }

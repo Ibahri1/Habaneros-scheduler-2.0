@@ -26,7 +26,7 @@ export function createWorker(input: WorkerFormInput, state: AppState): Worker {
     employeeCode: input.employeeCode,
     name: input.name.trim(),
     position: input.position.trim() || "Crew",
-    role: input.isManager ? "Manager" : "Crew",
+    role: input.isManager ? "Lead" : "Crew",
     isManager: input.isManager,
     maxWeeklyHours: input.maxWeeklyHours,
     preferredWeeklyHours: input.preferredWeeklyHours,
