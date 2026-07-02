@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.5.4 - 2026-07-02
+
+- Replaced renderer-blocking browser alerts and confirmations with parented Electron dialogs.
+- Removed delayed field refocusing that could steal focus from the next employee input clicked after a dialog.
+- Added centralized post-dialog cleanup for pointer events, disabled/read-only state, inert state, ARIA state, focus, and stale hidden dialog artifacts.
+
+## 1.5.3 - 2026-07-02
+
+- Fixed Electron window and web-content focus not being restored after alerts, confirmations, file dialogs, and printing.
+- Added secure dialog cleanup that returns focus to the main window and revalidates employee form interactivity without reloading the page.
+
 ## 1.5.2 - 2026-07-02
 
 - Fixed employee identity fields occasionally losing interactivity after native dialogs and other app actions.

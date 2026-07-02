@@ -62,7 +62,6 @@ const els = {
 };
 
 const workerIdentityFields = [els.workerName, els.employeeCode, els.workerPosition];
-let lastFocusedWorkerField: HTMLInputElement | null = null;
 
 void init();
 
@@ -91,10 +90,9 @@ async function init(): Promise<void> {
 
 function bindEvents(): void {
   els.workerForm.addEventListener("submit", (event) => void addWorker(event));
-  els.workerForm.addEventListener("reset", () => queueMicrotask(ensureWorkerFormInteractive));
-  workerIdentityFields.forEach((field) => field.addEventListener("focus", () => { lastFocusedWorkerField = field; }));
-  window.addEventListener("focus", restoreWorkerFormAfterFocusReturn);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) restoreWorkerFormAfterFocusReturn(); });
+  els.workerForm.addEventListener("reset", () => queueMicrotask(cleanupAfterDialog));
+  window.addEventListener("focus", cleanupAfterDialog);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) cleanupAfterDialog(); });
   els.noHourLimits.addEventListener("change", updateAddWorkerHourFields);
   els.generateBtn.addEventListener("click", () => void generateAndSaveSchedule());
   els.printBtn.addEventListener("click", () => void printSchedule());
@@ -139,9 +137,9 @@ async function addWorker(event: Event): Promise<void> {
   event.preventDefault();
   try {
     const availability = selectedAvailableDays();
-    if (!els.workerName.value.trim()) { alert("Enter an employee name before saving."); return; }
-    if (!/^\d{4}$/.test(els.employeeCode.value)) { alert("Enter a valid 4-digit employee code."); return; }
-    if (state.workers.some((worker) => worker.employeeCode === els.employeeCode.value)) { alert("That employee code is already assigned."); return; }
+    if (!els.workerName.value.trim()) { await showDialogMessage("Enter an employee name before saving."); return; }
+    if (!/^\d{4}$/.test(els.employeeCode.value)) { await showDialogMessage("Enter a valid 4-digit employee code."); return; }
+    if (state.workers.some((worker) => worker.employeeCode === els.employeeCode.value)) { await showDialogMessage("That employee code is already assigned."); return; }
     state.workers.push(createWorker({
       employeeCode: els.employeeCode.value,
       name: els.workerName.value,
@@ -175,12 +173,17 @@ function resetWorkerForm(): void {
   els.maxWeeklyHours.value = "45";
   els.preferredWeeklyHours.value = "40";
   updateAddWorkerHourFields();
-  lastFocusedWorkerField = null;
   ensureWorkerFormInteractive();
 }
 
 function ensureWorkerFormInteractive(): void {
+  document.documentElement.removeAttribute("inert");
+  document.documentElement.removeAttribute("aria-hidden");
+  document.body.removeAttribute("inert");
+  document.body.removeAttribute("aria-hidden");
+  document.body.style.pointerEvents = "";
   els.workerForm.removeAttribute("inert");
+  els.workerForm.removeAttribute("aria-hidden");
   els.workerForm.removeAttribute("aria-disabled");
   els.workerForm.style.pointerEvents = "";
   workerIdentityFields.forEach((field) => {
@@ -191,13 +194,10 @@ function ensureWorkerFormInteractive(): void {
   });
 }
 
-function restoreWorkerFormAfterFocusReturn(): void {
-  requestAnimationFrame(() => {
-    ensureWorkerFormInteractive();
-    if (lastFocusedWorkerField?.isConnected && document.activeElement === document.body) {
-      lastFocusedWorkerField.focus({ preventScroll: true });
-    }
-  });
+function cleanupAfterDialog(): void {
+  document.querySelectorAll<HTMLElement>("[data-dialog-overlay], .dialog-backdrop, .modal-backdrop").forEach((element) => element.remove());
+  ensureWorkerFormInteractive();
+  window.focus();
 }
 
 function updateAddWorkerHourFields(): void {
@@ -241,7 +241,7 @@ async function toggleWorkerActive(id: string): Promise<void> {
 async function deleteWorker(id: string): Promise<void> {
   const worker = findWorker(id);
   if (!worker) return;
-  if (!confirm("Delete " + worker.name + "? This cannot be undone.")) return;
+  if (!await confirmDialog("Delete " + worker.name + "? This cannot be undone.")) return;
   state.workers = state.workers.filter((item) => item.id !== id);
   state.schedule = null;
   await saveStateAndRender();
@@ -252,8 +252,8 @@ async function editWorker(input: HTMLInputElement | HTMLSelectElement | HTMLText
   if (!worker) return;
   switch (input.dataset.field) {
     case "employeeCode":
-      if (!/^\d{4}$/.test(input.value)) { alert("Employee code must contain exactly 4 digits."); renderWorkers(); return; }
-      if (state.workers.some((item) => item.id !== worker.id && item.employeeCode === input.value)) { alert("That employee code is already assigned."); renderWorkers(); return; }
+      if (!/^\d{4}$/.test(input.value)) { await showDialogMessage("Employee code must contain exactly 4 digits."); renderWorkers(); return; }
+      if (state.workers.some((item) => item.id !== worker.id && item.employeeCode === input.value)) { await showDialogMessage("That employee code is already assigned."); renderWorkers(); return; }
       worker.employeeCode = input.value;
       break;
     case "position": worker.position = input.value || "Crew"; worker.role = worker.isManager ? "Lead" : "Crew"; break;
@@ -300,7 +300,7 @@ async function generateAndSaveSchedule(): Promise<void> {
     state.schedule = generateSchedule(state);
     await saveStateAndRender();
     const warnings = state.schedule.days.flatMap((day) => day.warnings);
-    if (warnings.length) alert("Schedule generated with warnings:\n\n" + warnings.slice(0, 8).join("\n") + (warnings.length > 8 ? "\n..." : ""));
+    if (warnings.length) await showDialogMessage("Schedule generated with warnings:\n\n" + warnings.slice(0, 8).join("\n") + (warnings.length > 8 ? "\n..." : ""));
   } catch (error) {
     showError("The schedule could not be generated.", error);
   }
@@ -376,9 +376,13 @@ async function saveEditedSchedule(): Promise<void> {
 }
 
 async function printSchedule(): Promise<void> {
-  if (!state.schedule) { alert("Generate a schedule before printing."); return; }
-  const result = await window.habanerosDesktop.printSchedule(buildPrintHtml());
-  if (!result.success) alert(result.message);
+  if (!state.schedule) { await showDialogMessage("Generate a schedule before printing."); return; }
+  try {
+    const result = await window.habanerosDesktop.printSchedule(buildPrintHtml());
+    if (!result.success) await showDialogMessage(result.message);
+  } finally {
+    await restoreAfterDialog();
+  }
 }
 
 function buildPrintHtml(): string {
@@ -397,9 +401,11 @@ async function exportData(format: ExportFormat): Promise<void> {
   try {
     syncRulesFromInputs();
     const result = await window.habanerosDesktop.exportData({ format, state, settings });
-    alert(result.message);
+    await showDialogMessage(result.message);
   } catch (error) {
     showError("Export failed.", error);
+  } finally {
+    await restoreAfterDialog();
   }
 }
 
@@ -409,9 +415,11 @@ async function importData(): Promise<void> {
     if (imported.canceled) return;
     const result = imported.fileName?.toLowerCase().endsWith(".csv") ? importCsv(imported.content || "") : importJson(imported.content || "");
     await saveStateAndRender();
-    alert("Import complete.\n\nImported: " + result.imported + "\nSkipped: " + result.skipped + (result.messages.length ? "\n\n" + result.messages.join("\n") : ""));
+    await showDialogMessage("Import complete.\n\nImported: " + result.imported + "\nSkipped: " + result.skipped + (result.messages.length ? "\n\n" + result.messages.join("\n") : ""));
   } catch (error) {
     showError("Import failed.", error);
+  } finally {
+    await restoreAfterDialog();
   }
 }
 
@@ -497,7 +505,7 @@ async function saveCloudConfig(event: Event): Promise<void> {
   try {
     cloudConfig = await window.habanerosDesktop.saveCloudConfig(readCloudConfigForm());
     renderCloudConfig();
-    alert("Supabase settings saved.");
+    await showDialogMessage("Supabase settings saved.");
   } catch (error) { showError("Supabase settings could not be saved.", error); }
 }
 
@@ -506,7 +514,7 @@ async function testCloudConfig(): Promise<void> {
     const config = readCloudConfigForm();
     const result = await window.habanerosDesktop.testCloudConfig(config);
     els.cloudStatus.textContent = "Connected";
-    alert(result.message);
+    await showDialogMessage(result.message);
   } catch (error) { els.cloudStatus.textContent = "Connection failed"; showError("Supabase connection failed.", error); }
 }
 
@@ -514,10 +522,10 @@ async function syncCloudEmployees(): Promise<void> {
   try {
     cloudConfig = await window.habanerosDesktop.saveCloudConfig(readCloudConfigForm());
     const missingCodes = state.workers.filter((worker) => !/^\d{4}$/.test(worker.employeeCode));
-    if (missingCodes.length) { alert("Add a 4-digit code for every employee before syncing. Missing: " + missingCodes.map((worker) => worker.name).join(", ")); return; }
+    if (missingCodes.length) { await showDialogMessage("Add a 4-digit code for every employee before syncing. Missing: " + missingCodes.map((worker) => worker.name).join(", ")); return; }
     const result = await window.habanerosDesktop.syncCloudEmployees(state.workers);
     els.cloudStatus.textContent = "Employees synced";
-    alert(result.message);
+    await showDialogMessage(result.message);
   } catch (error) { showError("Employees could not be synced.", error); }
 }
 
@@ -560,7 +568,7 @@ async function handleSubmission(button: HTMLButtonElement): Promise<void> {
   try {
     if (action === "apply") {
       const worker = findWorker(submission.localWorkerId);
-      if (!worker) { alert("This submission is not linked to a local employee. Sync employees and try again."); return; }
+      if (!worker) { await showDialogMessage("This submission is not linked to a local employee. Sync employees and try again."); return; }
       worker.availability = [...submission.availableDays];
       await saveState();
     }
@@ -579,8 +587,8 @@ async function applyAllSubmissions(): Promise<void> {
   const pending = submissions.filter((submission) => submission.status === "pending");
   if (!pending.length) return;
   const missing = pending.filter((submission) => !findWorker(submission.localWorkerId));
-  if (missing.length) { alert("These submissions are not linked to local employees: " + missing.map((item) => item.employeeName).join(", ") + ". Sync employees and try again."); return; }
-  if (!confirm("Apply all " + pending.length + " pending availability submissions?")) return;
+  if (missing.length) { await showDialogMessage("These submissions are not linked to local employees: " + missing.map((item) => item.employeeName).join(", ") + ". Sync employees and try again."); return; }
+  if (!await confirmDialog("Apply all " + pending.length + " pending availability submissions?")) return;
   try {
     for (const submission of pending) {
       await window.habanerosDesktop.updateAvailabilitySubmission({ id: submission.id, availableDays: submission.availableDays, status: "applied", managerNotes: submission.managerNotes });
@@ -620,7 +628,7 @@ function renderHistory(): void {
 }
 
 async function deleteHistorySubmission(id: string): Promise<void> {
-  if (!confirm("Are you sure?")) return;
+  if (!await confirmDialog("Are you sure?")) return;
   try {
     await window.habanerosDesktop.deleteAvailabilitySubmission(id);
     submissions = submissions.filter((submission) => submission.id !== id);
@@ -640,7 +648,7 @@ function formatWeek(value: string): string {
 }
 
 async function clearData(): Promise<void> {
-  if (!confirm("Clear the current generated schedule? Employee profiles and settings will not be affected.")) return;
+  if (!await confirmDialog("Clear the current generated schedule? Employee profiles and settings will not be affected.")) return;
   state.schedule = null;
   await saveStateAndRender();
 }
@@ -671,5 +679,31 @@ async function saveState(): Promise<void> {
 
 function showError(message: string, error: unknown): void {
   console.error(message, error);
-  alert(message + "\n\n" + (error instanceof Error ? error.message : "Please try again."));
+  void showDialogMessage(message + "\n\n" + (error instanceof Error ? error.message : "Please try again."));
+}
+
+async function showDialogMessage(message: string): Promise<void> {
+  try {
+    await window.habanerosDesktop.showMessage(message);
+  } finally {
+    cleanupAfterDialog();
+  }
+}
+
+async function confirmDialog(message: string): Promise<boolean> {
+  try {
+    return await window.habanerosDesktop.showConfirmation(message);
+  } finally {
+    cleanupAfterDialog();
+  }
+}
+
+async function restoreAfterDialog(): Promise<void> {
+  try {
+    await window.habanerosDesktop.restoreFocus();
+  } catch (error) {
+    console.error("The main window could not restore focus after a dialog.", error);
+  } finally {
+    cleanupAfterDialog();
+  }
 }

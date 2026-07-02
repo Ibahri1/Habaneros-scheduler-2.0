@@ -27,12 +27,36 @@ export function registerSchedulerIpc(): void {
     dirtyState = Boolean(isDirty);
     return dirtyState;
   });
+  ipcMain.handle("app:restoreFocus", (event) => focusWindow(BrowserWindow.fromWebContents(event.sender)));
+  ipcMain.handle("app:showMessage", async (event, input: unknown) => {
+    const ownerWindow = BrowserWindow.fromWebContents(event.sender);
+    const message = dialogMessage(input);
+    try {
+      const options = { type: "info" as const, buttons: ["OK"], defaultId: 0, cancelId: 0, title: "Habaneros Scheduler", message };
+      if (ownerWindow) await dialog.showMessageBox(ownerWindow, options); else await dialog.showMessageBox(options);
+    } finally {
+      focusWindow(ownerWindow);
+    }
+  });
+  ipcMain.handle("app:showConfirmation", async (event, input: unknown) => {
+    const ownerWindow = BrowserWindow.fromWebContents(event.sender);
+    const message = dialogMessage(input);
+    try {
+      const options = { type: "question" as const, buttons: ["Cancel", "Confirm"], defaultId: 0, cancelId: 0, title: "Habaneros Scheduler", message };
+      const result = ownerWindow ? await dialog.showMessageBox(ownerWindow, options) : await dialog.showMessageBox(options);
+      return result.response === 1;
+    } finally {
+      focusWindow(ownerWindow);
+    }
+  });
   ipcMain.handle("app:confirmClose", async () => {
     if (!dirtyState) return true;
     const focusedWindow = BrowserWindow.getFocusedWindow();
     const options = { type: "warning" as const, buttons: ["Stay", "Close without saving"], defaultId: 0, cancelId: 0, title: "Unsaved changes", message: "You have unsaved scheduling changes.", detail: "Close the app without saving?" };
     const result = focusedWindow ? await dialog.showMessageBox(focusedWindow, options) : await dialog.showMessageBox(options);
-    return result.response === 1;
+    const canClose = result.response === 1;
+    if (!canClose) focusWindow(focusedWindow);
+    return canClose;
   });
   ipcMain.handle("schedule:print", async (_event, html: string) => printSchedule(html));
   ipcMain.handle("data:export", async (_event, payload: ExportPayload) => exportData(payload));
@@ -64,6 +88,7 @@ export function registerSchedulerIpc(): void {
 
 async function printSchedule(html: string): Promise<{ success: boolean; message: string }> {
   if (!html.trim()) return { success: false, message: "Generate a schedule before printing." };
+  const ownerWindow = BrowserWindow.getFocusedWindow();
   const printWindow = new BrowserWindow({ show: false, webPreferences: { nodeIntegration: false, contextIsolation: true } });
   try {
     await printWindow.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(html));
@@ -76,6 +101,7 @@ async function printSchedule(html: string): Promise<{ success: boolean; message:
     return { success: false, message: error instanceof Error ? error.message : "Unable to print schedule." };
   } finally {
     printWindow.close();
+    focusWindow(ownerWindow);
   }
 }
 
@@ -88,6 +114,19 @@ async function exportData(payload: ExportPayload): Promise<{ success: boolean; m
   const content = payload.format === "csv" ? toCsv(payload) : JSON.stringify({ state: payload.state, settings: payload.settings, exportedAt: new Date().toISOString() }, null, 2);
   await fs.writeFile(result.filePath, content, "utf8");
   return { success: true, message: "Exported to " + result.filePath };
+}
+
+function focusWindow(window: BrowserWindow | null): void {
+  if (!window || window.isDestroyed()) return;
+  if (window.isMinimized()) window.restore();
+  window.show();
+  window.focus();
+  window.webContents.focus();
+}
+
+function dialogMessage(input: unknown): string {
+  if (typeof input !== "string" || !input.trim()) return "An unexpected message was requested.";
+  return input.slice(0, 4000);
 }
 
 async function importData(): Promise<{ canceled: boolean; fileName?: string; content?: string }> {
