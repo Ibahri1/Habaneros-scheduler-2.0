@@ -1,5 +1,4 @@
-import { AppSettings, AppState, DAYS, ScheduleRules, Worker, WorkerRole, WorkerShiftTimes } from "./types";
-import { addHoursToTime } from "./time";
+import { AppSettings, AppState, DAYS, ScheduleRules, Worker, WorkerRole } from "./types";
 
 export function defaultRules(): ScheduleRules {
   return {
@@ -23,13 +22,6 @@ export function defaultAppState(): AppState {
   return { workers: [], rules: defaultRules(), schedule: null };
 }
 
-export function defaultWorkerShiftTimes(rules: ScheduleRules): WorkerShiftTimes {
-  return {
-    open: { start: rules.openShift || "08:00", end: addHoursToTime(rules.openShift || "08:00", Number(rules.shiftHours) || 8) },
-    close: { start: rules.closeShift || "16:00", end: addHoursToTime(rules.closeShift || "16:00", Number(rules.shiftHours) || 8) }
-  };
-}
-
 function normalizeRole(role: unknown, position: string, isManager: boolean): WorkerRole {
   if (role === "Manager" || role === "Lead" || isManager) return "Lead";
   if (role === "Lead") return "Lead";
@@ -38,7 +30,6 @@ function normalizeRole(role: unknown, position: string, isManager: boolean): Wor
 }
 
 export function normalizeWorker(worker: Partial<Worker> & { id: string; name: string }, rules: ScheduleRules): Worker {
-  const defaults = defaultWorkerShiftTimes(rules);
   const rawPosition = String(worker.position || worker.role || "Crew");
   const position = rawPosition.toLowerCase() === "manager" ? "Lead" : rawPosition;
   const isManager = Boolean(worker.isManager || String(worker.role) === "Manager" || worker.role === "Lead");
@@ -51,20 +42,14 @@ export function normalizeWorker(worker: Partial<Worker> & { id: string; name: st
     position,
     role,
     isManager: role === "Lead" || isManager,
+    noHourLimits: Boolean(worker.noHourLimits),
     maxWeeklyHours,
     preferredWeeklyHours: Number(worker.preferredWeeklyHours || Math.min(maxWeeklyHours, 32)),
     maxDays: Number(worker.maxDays || 7),
     canOpen: Boolean(worker.canOpen),
     canClose: Boolean(worker.canClose),
-    needsBreakFlag: worker.needsBreakFlag !== false,
     active: worker.active !== false,
     notes: String(worker.notes || ""),
-    availability: worker.availability || [],
-    shiftTimes: {
-      ...defaults,
-      ...(worker.shiftTimes || {}),
-      open: { ...defaults.open, ...(worker.shiftTimes?.open || {}) },
-      close: { ...defaults.close, ...(worker.shiftTimes?.close || {}) }
-    }
+    availability: worker.availability || []
   };
 }

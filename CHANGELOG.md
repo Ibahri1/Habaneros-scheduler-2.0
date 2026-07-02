@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.5.2 - 2026-07-02
+
+- Fixed employee identity fields occasionally losing interactivity after native dialogs and other app actions.
+- Added focused form-state recovery after reset, render, save, window focus return, and visibility changes without reloading or rebinding the application.
+
+## 1.5.1 - 2026-07-02
+
+- Removed the Duplicate and Remove buttons from manual schedule assignment editing without changing any other schedule controls or behavior.
+
+## 1.5.0 - 2026-07-02
+
+- Made employee availability optional and persisted unselected availability as an empty list.
+- Removed worker shift times from employee forms, employee cards, validation, imports, and stored employee profiles.
+- Changed schedule generation to derive assignment times from the global opening, closing, and default-hours rules.
+- Added immediate inline editing for assigned employee, day, shift, start time, and end time.
+- Added schedule-only assignment duplication and removal without changing employee profiles.
+- Added automatic coverage, duration, and lunch-reminder recalculation after manual schedule edits.
+- Preserved edited schedule assignments in local JSON and reflected all edits in printed schedules.
+
+## 1.4.0 - 2026-07-01
+
+- Added a persisted No Hour Limits employee setting above Preferred and Maximum Weekly Hours.
+- Disabled and visually muted both hour fields whenever No Hour Limits is enabled.
+- Updated scheduling to ignore preferred and maximum weekly hours only for unlimited employees while preserving fair scheduling and all other rules.
+- Removed the employee-level lunch checkbox and made every shift use the global Lunch After Hours threshold automatically.
+- Added No Hour Limits to JSON and CSV import/export and Supabase employee synchronization.
+- Added the required Supabase migration for existing cloud projects.
+
+## 1.3.2 - 2026-07-01
+
+- Rebuilt schedule printing as a compact landscape weekly grid that fits seven days on one page for typical four-person shifts.
+- Added an expanded multi-page layout for heavier staffing with non-splitting day, shift, employee, and warning rows.
+- Limited print output to the schedule document with the Habaneros Scheduler title, week date, seven-day grid, and optional warnings.
+
 ## 1.3.1 - 2026-07-01
 
 - Changed Clear so it removes only the generated schedule while preserving employees, availability, codes, submissions, and settings.

@@ -97,6 +97,14 @@ Run the entire script in one operation. It adds action dates and manager notes, 
 
 For a brand-new Supabase project, run `supabase/schema.sql` instead. Do not run both scripts on a new project.
 
+### Required 1.4.0 Database Update
+
+For an existing connected Supabase project, run this exact file once in Supabase SQL Editor:
+
+`supabase/migrations/1.4.0-no-hour-limits.sql`
+
+This adds the employee No Hour Limits flag to cloud synchronization and updates the employee sync function. New Supabase projects receive this field automatically from `supabase/schema.sql`.
+
 The schema creates only the Phase 1 tables:
 
 - `employees` stores the desktop worker link, display name, hashed code, and active status.
@@ -169,6 +177,12 @@ The renderer should not need to change.
 
 Add business logic in a module folder, expose persistence through `src/main/database`, validate IPC payloads in `src/shared/validation.ts`, and call it from the renderer through the preload API. Keep restaurant rules configurable in settings or data files rather than hard-coded in UI code.
 
+## Employee And Schedule Data
+
+Employee profiles store permanent information only: identity, employee code, position, lead status, availability, qualifications, hour preferences, active status, and notes. Availability may be empty when a worker is first created.
+
+Shift start and end times live only on generated schedule assignments. After generating a schedule, use the inline controls to change the employee, day, shift, start time, or end time. Duplicate copies an assignment to the next day; Remove deletes only that schedule assignment. These edits save immediately and never update employee profiles or generate a new schedule. Printed schedules use the saved edited assignments.
+
 ## Notes
 
 Git was not available in the original execution environment, so commits could not be created there. Initialize Git locally with `git init` when Git is installed.
@@ -179,8 +193,8 @@ After running `npm run dev`, verify these workflows:
 
 1. Dark Mode: toggle Dark Mode in the header, close the app, reopen it, and confirm the theme is restored.
 2. Available Days: add a worker with selected days, reopen the app, and confirm the same days are selected/displayed.
-3. Add Worker: enter name, position, lead status, opening/closing permissions, max/preferred hours, notes, availability, and shift times. Confirm the worker appears immediately.
-4. Edit Worker: change position, lead status, hours, permissions, notes, availability, and shift times from the worker card. Confirm changes persist after restart.
+3. Add Worker: enter name, position, lead status, opening/closing permissions, max/preferred hours, notes, and optional availability. Confirm the worker appears immediately even when no days are selected.
+4. Edit Worker: change position, lead status, hours, permissions, notes, and availability from the worker card. Confirm changes persist after restart.
 5. Deactivate Worker: click Deactivate and confirm the worker remains visible but is not scheduled. Click Activate to restore.
 6. Delete Worker: delete a worker and confirm it is removed after restart.
 7. Generate Schedule: add employees with different availability and permissions, generate a schedule, and review any warnings.
@@ -188,3 +202,5 @@ After running `npm run dev`, verify these workflows:
 9. Export JSON/CSV: click each export button, choose a location, and confirm files are created.
 10. Import JSON/CSV: import a backup or CSV employee list and confirm duplicates are skipped with a summary.
 11. Clear Schedule: generate a schedule, click Clear, and confirm only the generated schedule is removed. Confirm employees, availability, employee codes, cloud submissions, and settings remain unchanged.
+12. Edit Schedule: change an assignment's employee, day, shift, start time, and end time. Duplicate it to the next day, remove another assignment, restart the app, and confirm the edited schedule is preserved.
+13. Print Edited Schedule: print after making schedule edits and confirm the selected employees, moved assignments, and custom times match the on-screen schedule.

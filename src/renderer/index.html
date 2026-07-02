@@ -7,6 +7,7 @@
   <title>Habaneros Scheduler</title>
   <link rel="stylesheet" href="styles/app.css">
   <link rel="stylesheet" href="styles/cloud.css">
+  <link rel="stylesheet" href="styles/schedule-editor.css">
 </head>
 <body>
   <header class="app-header">
@@ -28,16 +29,19 @@
           <label>4-digit employee code <input id="employeeCode" type="text" inputmode="numeric" pattern="\d{4}" maxlength="4" autocomplete="off" placeholder="1234" required></label>
           <label>Position <input id="workerPosition" type="text" autocomplete="off" placeholder="Cook, Cashier, Server" value="Crew"></label>
           <label>Lead <select id="isManager"><option value="false">No</option><option value="true">Yes</option></select></label>
-          <label>Max weekly hours <input id="maxWeeklyHours" type="number" min="0" max="168" step="0.5" value="40"></label>
-          <label>Preferred weekly hours <input id="preferredWeeklyHours" type="number" min="0" max="168" step="0.5" value="32"></label>
         </div>
+        <fieldset class="hours-section"><legend>Weekly Hours</legend>
+          <label class="check-row hour-limit-toggle"><input id="noHourLimits" type="checkbox"> No Hour Limits</label>
+          <div class="form-grid hour-fields">
+            <label>Preferred Weekly Hours <input id="preferredWeeklyHours" type="number" min="0" max="168" step="0.5" value="40"></label>
+            <label>Maximum Weekly Hours <input id="maxWeeklyHours" type="number" min="0" max="168" step="0.5" value="45"></label>
+          </div>
+        </fieldset>
         <fieldset><legend>Qualified for</legend>
           <label class="check-row"><input id="canOpen" type="checkbox"> Opening</label>
           <label class="check-row"><input id="canClose" type="checkbox"> Closing</label>
-          <label class="check-row"><input id="needsBreakFlag" type="checkbox" checked> Lunch reminder after configured hours</label>
         </fieldset>
         <fieldset><legend>Available days</legend><div id="availabilityChecks" class="day-checks"></div></fieldset>
-        <fieldset><legend>Worker shift times</legend><div class="time-grid"><label>Open start <input id="workerOpenStart" type="time" value="08:00"></label><label>Open end <input id="workerOpenEnd" type="time" value="14:00"></label><label>Close start <input id="workerCloseStart" type="time" value="16:00"></label><label>Close end <input id="workerCloseEnd" type="time" value="22:00"></label></div></fieldset>
         <label>Notes <textarea id="workerNotes" rows="3" placeholder="Optional notes"></textarea></label>
         <button type="submit" class="primary">Add Worker</button>
       </form>
@@ -69,8 +73,8 @@
       </div>
       <div id="historyList" class="history-list"><div class="empty-state">Refresh submissions to load history.</div></div>
     </section>
-    <section class="panel wide"><div class="section-head with-action"><div><h2>Workers</h2><p>Edit availability, qualifications, status, employee code, and each worker's shift times.</p></div><span id="workerCount" class="count-pill">0 workers</span></div><div id="workersList" class="workers-list"></div></section>
-    <section class="panel wide"><div class="section-head with-action"><div><h2>Generated Schedule</h2><p>Warnings appear when coverage is missing, a lead is missing, or a lunch reminder is needed.</p></div><span id="scheduleStatus" class="count-pill">Not generated</span></div><div id="scheduleOutput" class="schedule-output"></div></section>
+    <section class="panel wide"><div class="section-head with-action"><div><h2>Workers</h2><p>Edit permanent employee details, availability, qualifications, and status.</p></div><span id="workerCount" class="count-pill">0 workers</span></div><div id="workersList" class="workers-list"></div></section>
+    <section class="panel wide"><div class="section-head with-action"><div><h2>Generated Schedule</h2><p>Edit employees, days, shifts, and times directly in the weekly schedule.</p></div><span id="scheduleStatus" class="count-pill">Not generated</span></div><div id="scheduleOutput" class="schedule-output"></div></section>
   </main>
   <script src="app.js"></script>
 </body>

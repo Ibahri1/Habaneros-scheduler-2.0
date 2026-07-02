@@ -68,7 +68,7 @@ async function printSchedule(html: string): Promise<{ success: boolean; message:
   try {
     await printWindow.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(html));
     await new Promise<void>((resolve, reject) => {
-      printWindow.webContents.print({ printBackground: true }, (success, failureReason) => success ? resolve() : reject(new Error(failureReason || "Printing was canceled.")));
+      printWindow.webContents.print({ printBackground: true, landscape: true, margins: { marginType: "none" } }, (success, failureReason) => success ? resolve() : reject(new Error(failureReason || "Printing was canceled.")));
     });
     return { success: true, message: "Print job sent." };
   } catch (error) {
@@ -101,9 +101,9 @@ async function importData(): Promise<{ canceled: boolean; fileName?: string; con
 }
 
 function toCsv(payload: ExportPayload): string {
-  const rows = [["Name", "Employee Code", "Position", "Lead", "Can Open", "Can Close", "Active", "Max Weekly Hours", "Preferred Weekly Hours", "Available Days", "Notes"]];
+  const rows = [["Name", "Employee Code", "Position", "Lead", "No Hour Limits", "Can Open", "Can Close", "Active", "Max Weekly Hours", "Preferred Weekly Hours", "Available Days", "Notes"]];
   for (const worker of payload.state.workers) {
-    rows.push([worker.name, worker.employeeCode, worker.position, worker.isManager ? "Yes" : "No", worker.canOpen ? "Yes" : "No", worker.canClose ? "Yes" : "No", worker.active ? "Yes" : "No", String(worker.maxWeeklyHours), String(worker.preferredWeeklyHours), worker.availability.join(";"), worker.notes]);
+    rows.push([worker.name, worker.employeeCode, worker.position, worker.isManager ? "Yes" : "No", worker.noHourLimits ? "Yes" : "No", worker.canOpen ? "Yes" : "No", worker.canClose ? "Yes" : "No", worker.active ? "Yes" : "No", String(worker.maxWeeklyHours), String(worker.preferredWeeklyHours), worker.availability.join(";"), worker.notes]);
   }
   return rows.map((row) => row.map(csvCell).join(",")).join("\n");
 }

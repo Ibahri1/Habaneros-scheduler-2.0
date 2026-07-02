@@ -1,9 +1,10 @@
-import { defaultAppState, defaultWorkerShiftTimes, normalizeWorker } from "../shared/defaults";
-import { DAYS, SHORT_DAYS, AvailabilitySubmission, CloudConfig, DayName, AppSettings, AppState, ExportFormat, ImportResult, ShiftSchedule, SubmissionStatus, Worker, WorkerRole } from "../shared/types";
+import { defaultAppState, normalizeWorker } from "../shared/defaults";
+import { DAYS, SHORT_DAYS, AvailabilitySubmission, CloudConfig, DayName, AppSettings, AppState, ExportFormat, ImportResult, ShiftName, ShiftSchedule, SubmissionStatus, Worker, WorkerRole } from "../shared/types";
 import { formatDate, formatDuration, formatTime, nextMonday } from "../shared/time";
 import { createWorker } from "./modules/employees/employees";
 import { toggleAvailability } from "./modules/availability/availability";
 import { generateSchedule } from "./modules/scheduling/scheduler";
+import { duplicateAssignment, findAssignment, moveAssignment, normalizeSchedule, refreshAssignment, refreshScheduleCoverage, removeAssignment, replaceAssignedEmployee } from "./modules/scheduling/scheduleEditor";
 import { countScheduleWarnings } from "./modules/reports/reports";
 import { applyTheme } from "./modules/settings/settings";
 import { byId, escapeHtml } from "./shared/dom";
@@ -20,15 +21,11 @@ const els = {
   employeeCode: byId<HTMLInputElement>("employeeCode"),
   workerPosition: byId<HTMLInputElement>("workerPosition"),
   isManager: byId<HTMLSelectElement>("isManager"),
+  noHourLimits: byId<HTMLInputElement>("noHourLimits"),
   maxWeeklyHours: byId<HTMLInputElement>("maxWeeklyHours"),
   preferredWeeklyHours: byId<HTMLInputElement>("preferredWeeklyHours"),
   canOpen: byId<HTMLInputElement>("canOpen"),
   canClose: byId<HTMLInputElement>("canClose"),
-  needsBreakFlag: byId<HTMLInputElement>("needsBreakFlag"),
-  workerOpenStart: byId<HTMLInputElement>("workerOpenStart"),
-  workerOpenEnd: byId<HTMLInputElement>("workerOpenEnd"),
-  workerCloseStart: byId<HTMLInputElement>("workerCloseStart"),
-  workerCloseEnd: byId<HTMLInputElement>("workerCloseEnd"),
   workerNotes: byId<HTMLTextAreaElement>("workerNotes"),
   weekStart: byId<HTMLInputElement>("weekStart"),
   openShift: byId<HTMLInputElement>("openShift"),
@@ -64,6 +61,9 @@ const els = {
   historyList: byId<HTMLDivElement>("historyList")
 };
 
+const workerIdentityFields = [els.workerName, els.employeeCode, els.workerPosition];
+let lastFocusedWorkerField: HTMLInputElement | null = null;
+
 void init();
 
 async function init(): Promise<void> {
@@ -78,18 +78,24 @@ async function init(): Promise<void> {
 
   if (!state.rules.weekStart) state.rules.weekStart = nextMonday();
   state.workers = state.workers.map((worker) => normalizeWorker(worker, state.rules));
+  normalizeSchedule(state.schedule, state.rules.mealBreakHours);
   applyTheme(settings);
   els.darkModeToggle.checked = settings.darkMode;
   renderCloudConfig();
   renderAvailabilityInputs();
   renderStaffingInputs();
   bindEvents();
-  resetWorkerTimeInputs();
+  updateAddWorkerHourFields();
   render();
 }
 
 function bindEvents(): void {
   els.workerForm.addEventListener("submit", (event) => void addWorker(event));
+  els.workerForm.addEventListener("reset", () => queueMicrotask(ensureWorkerFormInteractive));
+  workerIdentityFields.forEach((field) => field.addEventListener("focus", () => { lastFocusedWorkerField = field; }));
+  window.addEventListener("focus", restoreWorkerFormAfterFocusReturn);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) restoreWorkerFormAfterFocusReturn(); });
+  els.noHourLimits.addEventListener("change", updateAddWorkerHourFields);
   els.generateBtn.addEventListener("click", () => void generateAndSaveSchedule());
   els.printBtn.addEventListener("click", () => void printSchedule());
   els.importBtn.addEventListener("click", () => void importData());
@@ -126,6 +132,7 @@ function render(): void {
   els.mealBreakHours.value = String(state.rules.mealBreakHours);
   renderWorkers();
   renderSchedule();
+  ensureWorkerFormInteractive();
 }
 
 async function addWorker(event: Event): Promise<void> {
@@ -135,23 +142,18 @@ async function addWorker(event: Event): Promise<void> {
     if (!els.workerName.value.trim()) { alert("Enter an employee name before saving."); return; }
     if (!/^\d{4}$/.test(els.employeeCode.value)) { alert("Enter a valid 4-digit employee code."); return; }
     if (state.workers.some((worker) => worker.employeeCode === els.employeeCode.value)) { alert("That employee code is already assigned."); return; }
-    if (!availability.length) { alert("Please choose at least one available day."); return; }
     state.workers.push(createWorker({
       employeeCode: els.employeeCode.value,
       name: els.workerName.value,
       position: els.workerPosition.value,
       isManager: els.isManager.value === "true",
+      noHourLimits: els.noHourLimits.checked,
       maxWeeklyHours: Number(els.maxWeeklyHours.value) || 0,
       preferredWeeklyHours: Number(els.preferredWeeklyHours.value) || 0,
       canOpen: els.canOpen.checked,
       canClose: els.canClose.checked,
-      needsBreakFlag: els.needsBreakFlag.checked,
       notes: els.workerNotes.value,
-      availability,
-      openStart: els.workerOpenStart.value,
-      openEnd: els.workerOpenEnd.value,
-      closeStart: els.workerCloseStart.value,
-      closeEnd: els.workerCloseEnd.value
+      availability
     }, state));
     resetWorkerForm();
     state.schedule = null;
@@ -170,10 +172,37 @@ function resetWorkerForm(): void {
   els.workerForm.reset();
   els.workerPosition.value = "Crew";
   els.isManager.value = "false";
-  els.maxWeeklyHours.value = "40";
-  els.preferredWeeklyHours.value = "32";
-  els.needsBreakFlag.checked = true;
-  resetWorkerTimeInputs();
+  els.maxWeeklyHours.value = "45";
+  els.preferredWeeklyHours.value = "40";
+  updateAddWorkerHourFields();
+  lastFocusedWorkerField = null;
+  ensureWorkerFormInteractive();
+}
+
+function ensureWorkerFormInteractive(): void {
+  els.workerForm.removeAttribute("inert");
+  els.workerForm.removeAttribute("aria-disabled");
+  els.workerForm.style.pointerEvents = "";
+  workerIdentityFields.forEach((field) => {
+    field.disabled = false;
+    field.readOnly = false;
+    field.removeAttribute("aria-disabled");
+    field.style.pointerEvents = "";
+  });
+}
+
+function restoreWorkerFormAfterFocusReturn(): void {
+  requestAnimationFrame(() => {
+    ensureWorkerFormInteractive();
+    if (lastFocusedWorkerField?.isConnected && document.activeElement === document.body) {
+      lastFocusedWorkerField.focus({ preventScroll: true });
+    }
+  });
+}
+
+function updateAddWorkerHourFields(): void {
+  els.preferredWeeklyHours.disabled = els.noHourLimits.checked;
+  els.maxWeeklyHours.disabled = els.noHourLimits.checked;
 }
 
 function renderWorkers(): void {
@@ -184,23 +213,22 @@ function renderWorkers(): void {
   }
 
   els.workersList.innerHTML = state.workers.map((worker) => {
-    const openTime = worker.shiftTimes.open;
-    const closeTime = worker.shiftTimes.close;
-    const tags = (!worker.active ? '<span class="tag bad">Inactive</span>' : '') + (worker.canOpen ? '<span class="tag good">Can Open</span>' : '') + (worker.canClose ? '<span class="tag good">Can Close</span>' : '') + (worker.needsBreakFlag ? '<span class="tag warn">Lunch flag</span>' : '');
+    const tags = (!worker.active ? '<span class="tag bad">Inactive</span>' : '') + (worker.noHourLimits ? '<span class="tag good">No Hour Limits</span>' : '') + (worker.canOpen ? '<span class="tag good">Can Open</span>' : '') + (worker.canClose ? '<span class="tag good">Can Close</span>' : '');
     const daySummary = DAYS.map((day, index) => '<span class="day-mini ' + (worker.availability.includes(day) ? 'on' : '') + '">' + SHORT_DAYS[index] + '</span>').join("");
     const dayEditors = DAYS.map((day, index) => '<label class="day-mini ' + (worker.availability.includes(day) ? 'on' : '') + '"><input data-edit-day="' + worker.id + '" value="' + day + '" type="checkbox" ' + checked(worker.availability.includes(day)) + '> ' + SHORT_DAYS[index] + '</label>').join("");
-    return '<article class="worker-card ' + (!worker.active ? 'inactive' : '') + '"><div class="worker-top"><div><h3>' + escapeHtml(worker.name) + '</h3><div class="meta">Code ' + escapeHtml(worker.employeeCode || 'Not set') + ' | ' + escapeHtml(worker.position) + (worker.isManager ? ' | Lead' : '') + ' | ' + worker.maxWeeklyHours + ' max hrs | ' + worker.preferredWeeklyHours + ' preferred</div></div><div class="card-actions"><button class="secondary" type="button" data-toggle-active="' + worker.id + '">' + (worker.active ? 'Deactivate' : 'Activate') + '</button><button class="secondary danger" type="button" data-delete="' + worker.id + '">Delete</button></div></div><div class="tag-row">' + tags + '</div><div class="meta">Open ' + formatTime(openTime.start) + '-' + formatTime(openTime.end) + ' | Close ' + formatTime(closeTime.start) + '-' + formatTime(closeTime.end) + '</div>' + (worker.notes ? '<div class="meta">Notes: ' + escapeHtml(worker.notes) + '</div>' : '') + '<div class="worker-days">' + daySummary + '</div><div class="worker-edit"><label>Employee code <input data-edit="' + worker.id + '" data-field="employeeCode" type="text" inputmode="numeric" pattern="\\d{4}" maxlength="4" value="' + escapeHtml(worker.employeeCode) + '"></label><label>Position <input data-edit="' + worker.id + '" data-field="position" type="text" value="' + escapeHtml(worker.position) + '"></label><label>Lead <select data-edit="' + worker.id + '" data-field="isManager"><option value="false" ' + selected(String(worker.isManager), 'false') + '>No</option><option value="true" ' + selected(String(worker.isManager), 'true') + '>Yes</option></select></label><label>Max weekly hours <input data-edit="' + worker.id + '" data-field="maxWeeklyHours" type="number" min="0" max="168" step="0.5" value="' + worker.maxWeeklyHours + '"></label><label>Preferred weekly hours <input data-edit="' + worker.id + '" data-field="preferredWeeklyHours" type="number" min="0" max="168" step="0.5" value="' + worker.preferredWeeklyHours + '"></label><label class="check-row"><input data-edit="' + worker.id + '" data-field="canOpen" type="checkbox" ' + checked(worker.canOpen) + '> Can Open</label><label class="check-row"><input data-edit="' + worker.id + '" data-field="canClose" type="checkbox" ' + checked(worker.canClose) + '> Can Close</label><label class="check-row full"><input data-edit="' + worker.id + '" data-field="needsBreakFlag" type="checkbox" ' + checked(worker.needsBreakFlag) + '> Lunch reminder</label><div class="full time-grid"><label>Open start <input data-shift-time="' + worker.id + '" data-shift="open" data-part="start" type="time" value="' + openTime.start + '"></label><label>Open end <input data-shift-time="' + worker.id + '" data-shift="open" data-part="end" type="time" value="' + openTime.end + '"></label><label>Close start <input data-shift-time="' + worker.id + '" data-shift="close" data-part="start" type="time" value="' + closeTime.start + '"></label><label>Close end <input data-shift-time="' + worker.id + '" data-shift="close" data-part="end" type="time" value="' + closeTime.end + '"></label></div><label class="full">Notes <textarea data-edit="' + worker.id + '" data-field="notes" rows="2">' + escapeHtml(worker.notes) + '</textarea></label><div class="full worker-days">' + dayEditors + '</div></div></article>';
+    const hourSummary = worker.noHourLimits ? 'No hour limits' : worker.preferredWeeklyHours + ' preferred hrs | ' + worker.maxWeeklyHours + ' max hrs';
+    return '<article class="worker-card ' + (!worker.active ? 'inactive' : '') + '"><div class="worker-top"><div><h3>' + escapeHtml(worker.name) + '</h3><div class="meta">Code ' + escapeHtml(worker.employeeCode || 'Not set') + ' | ' + escapeHtml(worker.position) + (worker.isManager ? ' | Lead' : '') + ' | ' + hourSummary + '</div></div><div class="card-actions"><button class="secondary" type="button" data-toggle-active="' + worker.id + '">' + (worker.active ? 'Deactivate' : 'Activate') + '</button><button class="secondary danger" type="button" data-delete="' + worker.id + '">Delete</button></div></div><div class="tag-row">' + tags + '</div>' + (worker.notes ? '<div class="meta">Notes: ' + escapeHtml(worker.notes) + '</div>' : '') + '<div class="worker-days">' + daySummary + '</div><div class="worker-edit"><label>Employee code <input data-edit="' + worker.id + '" data-field="employeeCode" type="text" inputmode="numeric" pattern="\\d{4}" maxlength="4" value="' + escapeHtml(worker.employeeCode) + '"></label><label>Position <input data-edit="' + worker.id + '" data-field="position" type="text" value="' + escapeHtml(worker.position) + '"></label><label>Lead <select data-edit="' + worker.id + '" data-field="isManager"><option value="false" ' + selected(String(worker.isManager), 'false') + '>No</option><option value="true" ' + selected(String(worker.isManager), 'true') + '>Yes</option></select></label><label class="check-row full"><input data-edit="' + worker.id + '" data-field="noHourLimits" type="checkbox" ' + checked(worker.noHourLimits) + '> No Hour Limits</label><label>Preferred Weekly Hours <input data-edit="' + worker.id + '" data-field="preferredWeeklyHours" type="number" min="0" max="168" step="0.5" value="' + worker.preferredWeeklyHours + '" ' + disabled(worker.noHourLimits) + '></label><label>Maximum Weekly Hours <input data-edit="' + worker.id + '" data-field="maxWeeklyHours" type="number" min="0" max="168" step="0.5" value="' + worker.maxWeeklyHours + '" ' + disabled(worker.noHourLimits) + '></label><label class="check-row"><input data-edit="' + worker.id + '" data-field="canOpen" type="checkbox" ' + checked(worker.canOpen) + '> Can Open</label><label class="check-row"><input data-edit="' + worker.id + '" data-field="canClose" type="checkbox" ' + checked(worker.canClose) + '> Can Close</label><label class="full">Notes <textarea data-edit="' + worker.id + '" data-field="notes" rows="2">' + escapeHtml(worker.notes) + '</textarea></label><div class="full worker-days">' + dayEditors + '</div></div></article>';
   }).join("");
 
   els.workersList.querySelectorAll<HTMLButtonElement>("[data-toggle-active]").forEach((button) => button.addEventListener("click", () => void toggleWorkerActive(button.dataset.toggleActive!)));
   els.workersList.querySelectorAll<HTMLButtonElement>("[data-delete]").forEach((button) => button.addEventListener("click", () => void deleteWorker(button.dataset.delete!)));
   els.workersList.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("[data-edit]").forEach((input) => input.addEventListener("change", () => void editWorker(input)));
   els.workersList.querySelectorAll<HTMLInputElement>("[data-edit-day]").forEach((input) => input.addEventListener("change", () => void editWorkerDay(input)));
-  els.workersList.querySelectorAll<HTMLInputElement>("[data-shift-time]").forEach((input) => input.addEventListener("change", () => void editWorkerShiftTime(input)));
 }
 
 function selected(current: string, value: string): string { return current === value ? "selected" : ""; }
 function checked(value: boolean): string { return value ? "checked" : ""; }
+function disabled(value: boolean): string { return value ? "disabled" : ""; }
 
 async function toggleWorkerActive(id: string): Promise<void> {
   const worker = findWorker(id);
@@ -230,11 +258,11 @@ async function editWorker(input: HTMLInputElement | HTMLSelectElement | HTMLText
       break;
     case "position": worker.position = input.value || "Crew"; worker.role = worker.isManager ? "Lead" : "Crew"; break;
     case "isManager": worker.isManager = input.value === "true"; worker.role = worker.isManager ? "Lead" : "Crew"; break;
+    case "noHourLimits": worker.noHourLimits = input instanceof HTMLInputElement ? input.checked : worker.noHourLimits; break;
     case "maxWeeklyHours": worker.maxWeeklyHours = Number(input.value) || 0; break;
     case "preferredWeeklyHours": worker.preferredWeeklyHours = Number(input.value) || 0; break;
     case "canOpen": worker.canOpen = input instanceof HTMLInputElement ? input.checked : worker.canOpen; break;
     case "canClose": worker.canClose = input instanceof HTMLInputElement ? input.checked : worker.canClose; break;
-    case "needsBreakFlag": worker.needsBreakFlag = input instanceof HTMLInputElement ? input.checked : worker.needsBreakFlag; break;
     case "notes": worker.notes = input.value; break;
     default: return;
   }
@@ -246,16 +274,6 @@ async function editWorkerDay(input: HTMLInputElement): Promise<void> {
   const worker = findWorker(input.dataset.editDay || "");
   if (!worker) return;
   worker.availability = toggleAvailability(worker.availability, input.value as DayName, input.checked);
-  state.schedule = null;
-  await saveStateAndRender();
-}
-
-async function editWorkerShiftTime(input: HTMLInputElement): Promise<void> {
-  const worker = findWorker(input.dataset.shiftTime || "");
-  if (!worker) return;
-  const shift = input.dataset.shift === "close" ? "close" : "open";
-  const part = input.dataset.part === "end" ? "end" : "start";
-  worker.shiftTimes[shift][part] = input.value;
   state.schedule = null;
   await saveStateAndRender();
 }
@@ -296,11 +314,65 @@ function renderSchedule(): void {
   }
   const warningCount = countScheduleWarnings(state);
   els.scheduleStatus.textContent = warningCount ? warningCount + " warning" + (warningCount === 1 ? "" : "s") : "Ready";
-  els.scheduleOutput.innerHTML = state.schedule.days.map((day) => '<article class="schedule-day"><div class="schedule-day-head"><div><strong>' + day.day + '</strong><div class="small-muted">' + formatDate(day.date) + '</div></div>' + (day.warnings.length ? '<span class="tag bad">' + day.warnings.length + ' issue' + (day.warnings.length === 1 ? '' : 's') + '</span>' : '<span class="tag good">Covered</span>') + '</div><div class="shift-list">' + renderShift(day.shifts.open, "Opening") + renderShift(day.shifts.close, "Closing") + '</div>' + (day.warnings.length ? '<div class="warnings">' + day.warnings.map((warning) => '<div class="warning problem">' + escapeHtml(warning) + '</div>').join("") + '</div>' : '') + '</article>').join("");
+  els.scheduleOutput.innerHTML = state.schedule.days.map((day) => '<article class="schedule-day"><div class="schedule-day-head"><div><strong>' + day.day + '</strong><div class="small-muted">' + formatDate(day.date) + '</div></div>' + (day.warnings.length ? '<span class="tag bad">' + day.warnings.length + ' issue' + (day.warnings.length === 1 ? '' : 's') + '</span>' : '<span class="tag good">Covered</span>') + '</div><div class="shift-list">' + renderShift(day.day, day.shifts.open, "Opening") + renderShift(day.day, day.shifts.close, "Closing") + '</div>' + (day.warnings.length ? '<div class="warnings">' + day.warnings.map((warning) => '<div class="warning problem">' + escapeHtml(warning) + '</div>').join("") + '</div>' : '') + '</article>').join("");
+  bindScheduleEditorEvents();
 }
 
-function renderShift(shift: ShiftSchedule, label: string): string {
-  return '<div class="shift-box"><div class="shift-title"><span>' + label + '</span><span class="small-muted">Default ' + formatTime(shift.time) + ' | Need ' + shift.needed + '</span></div><div class="assigned-list">' + (shift.assigned.length ? shift.assigned.map((worker) => '<div class="assigned-person"><span>' + escapeHtml(worker.name) + '</span><span class="small-muted">' + escapeHtml(worker.position) + (worker.isManager ? ' | Lead' : '') + '</span><span class="person-time">' + worker.timeRange + ' (' + formatDuration(worker.durationHours) + ')</span></div>' + (worker.needsLunch ? '<div class="warning lunch">' + escapeHtml(worker.name) + ' reaches the configured lunch threshold. Plan lunch break.</div>' : '')).join("") : '<div class="empty-state">No one assigned.</div>') + '</div></div>';
+function renderShift(day: DayName, shift: ShiftSchedule, label: string): string {
+  return '<div class="shift-box"><div class="shift-title"><span>' + label + '</span><span class="small-muted">Default ' + formatTime(shift.time) + ' | Need ' + shift.needed + '</span></div><div class="assigned-list">' + (shift.assigned.length ? shift.assigned.map((assignment) => renderAssignment(day, shift.name, assignment.assignmentId)).join("") : '<div class="empty-state">No one assigned.</div>') + '</div></div>';
+}
+
+function renderAssignment(day: DayName, shift: ShiftName, assignmentId: string): string {
+  const assignment = findAssignment(state.schedule!, assignmentId)!.assignment;
+  const workerOptions = state.workers.map((worker) => '<option value="' + worker.id + '" ' + selected(worker.id, assignment.id) + '>' + escapeHtml(worker.name) + '</option>').join("");
+  const dayOptions = DAYS.map((item) => '<option value="' + item + '" ' + selected(item, day) + '>' + item + '</option>').join("");
+  return '<div class="assignment-editor" data-assignment-row="' + assignment.assignmentId + '"><label>Employee<select data-assignment-field="employee" data-assignment-id="' + assignment.assignmentId + '">' + workerOptions + '</select></label><label>Day<select data-assignment-field="day" data-assignment-id="' + assignment.assignmentId + '">' + dayOptions + '</select></label><label>Shift<select data-assignment-field="shift" data-assignment-id="' + assignment.assignmentId + '"><option value="open" ' + selected(shift, 'open') + '>Open</option><option value="close" ' + selected(shift, 'close') + '>Close</option></select></label><label>Start<input data-assignment-field="start" data-assignment-id="' + assignment.assignmentId + '" type="time" value="' + assignment.start + '"></label><label>End<input data-assignment-field="end" data-assignment-id="' + assignment.assignmentId + '" type="time" value="' + assignment.end + '"></label><div class="assignment-summary"><span>' + escapeHtml(assignment.position) + (assignment.isManager ? ' | Lead' : '') + '</span><span>' + formatDuration(assignment.durationHours) + '</span></div></div>' + (assignment.needsLunch ? '<div class="warning lunch">' + escapeHtml(assignment.name) + ' reaches the configured lunch threshold. Plan lunch break.</div>' : '');
+}
+
+function bindScheduleEditorEvents(): void {
+  els.scheduleOutput.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-assignment-field]").forEach((input) => input.addEventListener("change", () => void editScheduleAssignment(input)));
+  els.scheduleOutput.querySelectorAll<HTMLButtonElement>("[data-assignment-duplicate]").forEach((button) => button.addEventListener("click", () => void duplicateScheduleAssignment(button.dataset.assignmentDuplicate!)));
+  els.scheduleOutput.querySelectorAll<HTMLButtonElement>("[data-assignment-remove]").forEach((button) => button.addEventListener("click", () => void removeScheduleAssignment(button.dataset.assignmentRemove!)));
+}
+
+async function editScheduleAssignment(input: HTMLInputElement | HTMLSelectElement): Promise<void> {
+  if (!state.schedule) return;
+  const location = findAssignment(state.schedule, input.dataset.assignmentId || "");
+  if (!location) return;
+  const field = input.dataset.assignmentField;
+  if (field === "employee") {
+    const worker = findWorker(input.value);
+    if (worker) replaceAssignedEmployee(location.assignment, worker);
+  } else if (field === "day") {
+    moveAssignment(state.schedule, location.assignment.assignmentId, input.value as DayName, location.shift);
+  } else if (field === "shift") {
+    moveAssignment(state.schedule, location.assignment.assignmentId, location.day, input.value as ShiftName);
+  } else if (field === "start" || field === "end") {
+    location.assignment[field] = input.value;
+    refreshAssignment(location.assignment, state.rules.mealBreakHours);
+  }
+  await saveEditedSchedule();
+}
+
+async function duplicateScheduleAssignment(assignmentId: string): Promise<void> {
+  if (!state.schedule) return;
+  const location = findAssignment(state.schedule, assignmentId);
+  if (!location) return;
+  const nextDay = DAYS[(DAYS.indexOf(location.day) + 1) % DAYS.length];
+  duplicateAssignment(state.schedule, assignmentId, nextDay, location.shift);
+  await saveEditedSchedule();
+}
+
+async function removeScheduleAssignment(assignmentId: string): Promise<void> {
+  if (!state.schedule) return;
+  removeAssignment(state.schedule, assignmentId);
+  await saveEditedSchedule();
+}
+
+async function saveEditedSchedule(): Promise<void> {
+  if (!state.schedule) return;
+  refreshScheduleCoverage(state.schedule, state.workers);
+  await saveStateAndRender();
 }
 
 async function printSchedule(): Promise<void> {
@@ -310,11 +382,15 @@ async function printSchedule(): Promise<void> {
 }
 
 function buildPrintHtml(): string {
-  return '<!doctype html><html><head><meta charset="utf-8"><title>Habaneros Schedule</title><style>body{font-family:Segoe UI,Arial,sans-serif;color:#1c211b;margin:24px}h1{margin:0 0 4px}.muted{color:#667}.day{break-inside:avoid;border:1px solid #ccc;margin:14px 0}.head{background:#eef3ea;padding:10px 12px;font-weight:700}.shifts{display:grid;grid-template-columns:1fr 1fr}.shift{padding:10px 12px;border-top:1px solid #ccc}.shift+ .shift{border-left:1px solid #ccc}.person{margin:6px 0;padding:6px;border:1px solid #ddd}.warning{color:#8a2f14;font-weight:700}</style></head><body><h1>Habaneros Schedule</h1><div class="muted">Week of ' + escapeHtml(state.rules.weekStart) + '</div>' + state.schedule!.days.map((day) => '<section class="day"><div class="head">' + day.day + ' | ' + formatDate(day.date) + '</div><div class="shifts">' + printShift(day.shifts.open, 'Opening') + printShift(day.shifts.close, 'Closing') + '</div>' + day.warnings.map((warning) => '<div class="warning">' + escapeHtml(warning) + '</div>').join('') + '</section>').join('') + '</body></html>';
+  const schedule = state.schedule!;
+  const compact = schedule.days.every((day) => day.shifts.open.assigned.length <= 4 && day.shifts.close.assigned.length <= 4);
+  const warnings = schedule.days.flatMap((day) => day.warnings.map((warning) => '<div class="warning"><strong>' + day.day + ':</strong> ' + escapeHtml(warning) + '</div>')).join("");
+  const css = '@page{size:landscape;margin:.25in}*{box-sizing:border-box}body{font-family:Segoe UI,Arial,sans-serif;color:#182018;margin:0;font-size:8pt;line-height:1.15}.print-header{display:flex;align-items:end;justify-content:space-between;border-bottom:1.5px solid #246b46;padding:0 0 5px;margin:0 0 5px}.print-header h1{font-size:14pt;margin:0}.week{font-weight:700;color:#4d5a4e}.week-grid{display:grid;gap:3px;align-items:start}.week-grid.compact{grid-template-columns:repeat(7,minmax(0,1fr))}.week-grid.expanded{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.day{border:1px solid #aeb9ac;break-inside:avoid;page-break-inside:avoid;min-width:0}.day-head{background:#e9f1e8;border-bottom:1px solid #aeb9ac;padding:3px 4px;font-size:8pt;font-weight:800}.day-date{display:block;color:#536154;font-size:6.8pt;font-weight:600}.shift{padding:3px 4px;break-inside:avoid;page-break-inside:avoid}.shift+.shift{border-top:1px solid #cbd3c9}.shift-head{display:flex;justify-content:space-between;gap:3px;margin-bottom:2px;font-size:7pt}.shift-time{color:#59665a;white-space:nowrap}.person{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px;border-top:1px dotted #d4dbd2;padding:2px 0;break-inside:avoid;page-break-inside:avoid;font-size:7pt}.person-name{font-weight:700;overflow-wrap:anywhere}.person-time{white-space:nowrap}.empty{color:#697369;font-style:italic;padding:2px 0}.warnings-section{border-top:1px solid #aeb9ac;margin-top:5px;padding-top:4px;break-before:auto}.warnings-title{font-size:8pt;margin:0 0 3px}.warnings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 8px}.warning{color:#7d301b;font-size:6.8pt;break-inside:avoid;page-break-inside:avoid}@media print{html,body{width:100%;height:auto}.print-header{margin-top:0}.week-grid.compact{grid-template-columns:repeat(7,minmax(0,1fr))}.day,.shift,.person,.warning{break-inside:avoid;page-break-inside:avoid}.week-grid.expanded .day{margin-bottom:0}}';
+  return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Habaneros Scheduler</title><style>' + css + '</style></head><body><header class="print-header"><h1>Habaneros Scheduler</h1><div class="week">Week of ' + escapeHtml(state.rules.weekStart) + '</div></header><main class="week-grid ' + (compact ? 'compact' : 'expanded') + '">' + schedule.days.map((day) => '<section class="day"><div class="day-head">' + day.day + '<span class="day-date">' + formatDate(day.date) + '</span></div>' + printShift(day.shifts.open, 'Opening') + printShift(day.shifts.close, 'Closing') + '</section>').join('') + '</main>' + (warnings ? '<section class="warnings-section"><h2 class="warnings-title">Schedule Warnings</h2><div class="warnings-grid">' + warnings + '</div></section>' : '') + '</body></html>';
 }
 
 function printShift(shift: ShiftSchedule, label: string): string {
-  return '<div class="shift"><strong>' + label + ' - Need ' + shift.needed + '</strong>' + (shift.assigned.length ? shift.assigned.map((worker) => '<div class="person">' + escapeHtml(worker.name) + ' - ' + escapeHtml(worker.position) + '<br>' + worker.timeRange + (worker.isManager ? '<br>Lead' : '') + '</div>').join('') : '<p>No one assigned.</p>') + '</div>';
+  return '<div class="shift"><div class="shift-head"><strong>' + label + '</strong><span class="shift-time">' + formatTime(shift.time) + '</span></div>' + (shift.assigned.length ? shift.assigned.map((worker) => '<div class="person"><span class="person-name">' + escapeHtml(worker.name) + (worker.isManager ? ' (Lead)' : '') + '</span><span class="person-time">' + worker.timeRange + '</span></div>').join('') : '<div class="empty">No one assigned</div>') + '</div>';
 }
 
 async function exportData(format: ExportFormat): Promise<void> {
@@ -350,7 +426,10 @@ function importJson(content: string): ImportResult {
   }
   if ("settings" in parsed && parsed.settings) settings = { ...settings, ...parsed.settings };
   if (importedState.rules) state.rules = { ...state.rules, ...importedState.rules };
-  if (importedState.schedule) state.schedule = importedState.schedule;
+  if (importedState.schedule) {
+    state.schedule = importedState.schedule;
+    normalizeSchedule(state.schedule, state.rules.mealBreakHours);
+  }
   return { imported, skipped, messages: skipped ? [String(skipped) + " duplicate employee(s) skipped."] : [] };
 }
 
@@ -365,7 +444,7 @@ function importCsv(content: string): ImportResult {
     const name = get("name") || get("employee name");
     if (!name.trim()) { skipped++; continue; }
     const isLead = yes(get("lead")) || yes(get("manager"));
-    const worker = normalizeWorker({ id: crypto.randomUUID(), employeeCode: get("employee code"), name, position: get("position") || "Crew", role: isLead ? "Lead" : "Crew", isManager: isLead, maxWeeklyHours: Number(get("max weekly hours")) || 40, preferredWeeklyHours: Number(get("preferred weekly hours")) || 32, maxDays: 7, canOpen: yes(get("can open")), canClose: yes(get("can close")), needsBreakFlag: true, active: !no(get("active")), notes: get("notes"), availability: splitDays(get("available days")), shiftTimes: defaultWorkerShiftTimes(state.rules) }, state.rules);
+    const worker = normalizeWorker({ id: crypto.randomUUID(), employeeCode: get("employee code"), name, position: get("position") || "Crew", role: isLead ? "Lead" : "Crew", isManager: isLead, noHourLimits: yes(get("no hour limits")), maxWeeklyHours: Number(get("max weekly hours")) || 45, preferredWeeklyHours: Number(get("preferred weekly hours")) || 40, maxDays: 7, canOpen: yes(get("can open")), canClose: yes(get("can close")), active: !no(get("active")), notes: get("notes"), availability: splitDays(get("available days")) }, state.rules);
     if (mergeWorker(worker)) imported++; else skipped++;
   }
   return { imported, skipped, messages: skipped ? [String(skipped) + " duplicate or invalid row(s) skipped."] : [] };
@@ -582,16 +661,12 @@ async function saveStateAndRender(): Promise<void> {
 }
 
 async function saveState(): Promise<void> {
-  state = await window.habanerosDesktop.saveState(state);
-  await window.habanerosDesktop.setDirty(false);
-}
-
-function resetWorkerTimeInputs(): void {
-  const defaults = defaultWorkerShiftTimes(state.rules);
-  els.workerOpenStart.value = defaults.open.start;
-  els.workerOpenEnd.value = defaults.open.end;
-  els.workerCloseStart.value = defaults.close.start;
-  els.workerCloseEnd.value = defaults.close.end;
+  try {
+    state = await window.habanerosDesktop.saveState(state);
+    await window.habanerosDesktop.setDirty(false);
+  } finally {
+    ensureWorkerFormInteractive();
+  }
 }
 
 function showError(message: string, error: unknown): void {

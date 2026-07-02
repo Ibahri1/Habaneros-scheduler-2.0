@@ -11,7 +11,7 @@ export class AvailabilityService {
   async syncEmployees(config: CloudConfig, workers: Worker[]): Promise<number> {
     const eligible = workers.filter((worker) => /^\d{4}$/.test(worker.employeeCode));
     for (const worker of eligible) {
-      await callSupabaseRpc(config, "manager_upsert_employee", { p_local_worker_id: worker.id, p_name: worker.name, p_employee_code: worker.employeeCode, p_active: worker.active });
+      await callSupabaseRpc(config, "manager_upsert_employee", { p_local_worker_id: worker.id, p_name: worker.name, p_employee_code: worker.employeeCode, p_active: worker.active, p_no_hour_limits: worker.noHourLimits });
     }
     return eligible.length;
   }

@@ -23,6 +23,12 @@
 .submission-actions { justify-content: flex-end; }
 .status-line { margin-top: 6px; color: var(--muted); font-size: .84rem; }
 .status-error { color: var(--bad); }
+.hours-section { display: grid; gap: 10px; }
+.hour-limit-toggle { margin-top: 0; }
+.hour-fields { transition: opacity .15s ease; }
+.hour-fields:has(input:disabled) { opacity: .52; }
+.hour-fields input:disabled, .worker-edit input:disabled { background: #e8ebe6; color: #778075; cursor: not-allowed; border-color: #d2d8cf; opacity: .7; }
+[data-theme="dark"] .hour-fields input:disabled, [data-theme="dark"] .worker-edit input:disabled { background: #2a2f29; color: #7f897d; }
 .submission-notes { grid-column: 1 / -1; }
 .history-filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
 .history-list { display: grid; gap: 10px; }

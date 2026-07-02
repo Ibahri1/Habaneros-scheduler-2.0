@@ -7,9 +7,6 @@ export type WorkerRole = "Crew" | "Lead";
 export type ExportFormat = "json" | "csv";
 export type SubmissionStatus = "pending" | "reviewed" | "applied" | "rejected";
 
-export interface ShiftTime { start: string; end: string; }
-export interface WorkerShiftTimes { open: ShiftTime; close: ShiftTime; }
-
 export interface Worker {
   id: string;
   employeeCode: string;
@@ -17,16 +14,15 @@ export interface Worker {
   position: string;
   role: WorkerRole;
   isManager: boolean;
+  noHourLimits: boolean;
   maxWeeklyHours: number;
   preferredWeeklyHours: number;
   maxDays: number;
   canOpen: boolean;
   canClose: boolean;
-  needsBreakFlag: boolean;
   active: boolean;
   notes: string;
   availability: DayName[];
-  shiftTimes: WorkerShiftTimes;
 }
 
 export interface StaffingRule { open: number; close: number; }
@@ -40,6 +36,7 @@ export interface ScheduleRules {
 }
 
 export interface AssignedWorker {
+  assignmentId: string;
   id: string;
   name: string;
   position: string;

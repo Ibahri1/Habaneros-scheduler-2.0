@@ -6,9 +6,12 @@ create table if not exists public.employees (
   name text not null check (char_length(name) between 1 and 120),
   employee_code_hash text not null unique,
   active boolean not null default true,
+  no_hour_limits boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.employees add column if not exists no_hour_limits boolean not null default false;
 
 create table if not exists public.availability_submissions (
   id uuid primary key default gen_random_uuid(),
@@ -69,6 +72,8 @@ end;
 $$;
 
 drop function if exists public.manager_upsert_employee(text, text, text, text, boolean);
+drop function if exists public.manager_upsert_employee(text, text, text, boolean);
+drop function if exists public.manager_upsert_employee(text, text, text, boolean, boolean);
 drop function if exists public.manager_list_availability_submissions(text, text);
 drop function if exists public.manager_update_availability_submission(text, uuid, text[], text);
 drop function if exists public.manager_key_is_valid(text);
@@ -77,15 +82,15 @@ drop function if exists public.manager_update_availability_submission(uuid, text
 drop function if exists public.manager_update_availability_submission(uuid, text[], text, text);
 drop function if exists public.manager_delete_availability_submission(uuid);
 
-create or replace function public.manager_upsert_employee(p_local_worker_id text, p_name text, p_employee_code text, p_active boolean)
+create or replace function public.manager_upsert_employee(p_local_worker_id text, p_name text, p_employee_code text, p_active boolean, p_no_hour_limits boolean)
 returns uuid language plpgsql security definer set search_path = public, extensions
 as $$
 declare v_id uuid;
 begin
   if p_employee_code !~ '^\d{4}$' then raise exception 'Employee code must contain 4 digits'; end if;
-  insert into public.employees (local_worker_id, name, employee_code_hash, active, updated_at)
-  values (p_local_worker_id, p_name, encode(digest(p_employee_code, 'sha256'), 'hex'), p_active, now())
-  on conflict (local_worker_id) do update set name = excluded.name, employee_code_hash = excluded.employee_code_hash, active = excluded.active, updated_at = now()
+  insert into public.employees (local_worker_id, name, employee_code_hash, active, no_hour_limits, updated_at)
+  values (p_local_worker_id, p_name, encode(digest(p_employee_code, 'sha256'), 'hex'), p_active, coalesce(p_no_hour_limits, false), now())
+  on conflict (local_worker_id) do update set name = excluded.name, employee_code_hash = excluded.employee_code_hash, active = excluded.active, no_hour_limits = excluded.no_hour_limits, updated_at = now()
   returning id into v_id;
   return v_id;
 end;
@@ -127,13 +132,13 @@ $$;
 
 revoke all on function public.employee_phone_lookup(text) from public;
 revoke all on function public.submit_employee_availability(text, date, text[]) from public;
-revoke all on function public.manager_upsert_employee(text, text, text, boolean) from public;
+revoke all on function public.manager_upsert_employee(text, text, text, boolean, boolean) from public;
 revoke all on function public.manager_list_availability_submissions(text) from public;
 revoke all on function public.manager_update_availability_submission(uuid, text[], text, text) from public;
 revoke all on function public.manager_delete_availability_submission(uuid) from public;
 grant execute on function public.employee_phone_lookup(text) to anon;
 grant execute on function public.submit_employee_availability(text, date, text[]) to anon;
-grant execute on function public.manager_upsert_employee(text, text, text, boolean) to anon;
+grant execute on function public.manager_upsert_employee(text, text, text, boolean, boolean) to anon;
 grant execute on function public.manager_list_availability_submissions(text) to anon;
 grant execute on function public.manager_update_availability_submission(uuid, text[], text, text) to anon;
 grant execute on function public.manager_delete_availability_submission(uuid) to anon;
