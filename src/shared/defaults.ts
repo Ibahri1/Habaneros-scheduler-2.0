@@ -35,6 +35,12 @@ export function normalizeWorker(worker: Partial<Worker> & { id: string; name: st
   const isManager = Boolean(worker.isManager || String(worker.role) === "Manager" || worker.role === "Lead");
   const role = normalizeRole(worker.role, position, isManager);
   const maxWeeklyHours = Number(worker.maxWeeklyHours || 40);
+  const availability = worker.availability || [];
+  const shiftAvailability = availability.reduce((result, day) => {
+    const value = worker.shiftAvailability?.[day];
+    result[day] = value === "Open" || value === "Close" || value === "Both" ? value : "Both";
+    return result;
+  }, {} as Worker["shiftAvailability"]);
   return {
     id: worker.id,
     employeeCode: /^\d{4}$/.test(String(worker.employeeCode || "")) ? String(worker.employeeCode) : "",
@@ -50,6 +56,7 @@ export function normalizeWorker(worker: Partial<Worker> & { id: string; name: st
     canClose: Boolean(worker.canClose),
     active: worker.active !== false,
     notes: String(worker.notes || ""),
-    availability: worker.availability || []
+    availability,
+    shiftAvailability
   };
 }

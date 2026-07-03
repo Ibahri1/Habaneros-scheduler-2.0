@@ -105,6 +105,14 @@ For an existing connected Supabase project, run this exact file once in Supabase
 
 This adds the employee No Hour Limits flag to cloud synchronization and updates the employee sync function. New Supabase projects receive this field automatically from `supabase/schema.sql`.
 
+### Required 1.6.0 Database Update
+
+For an existing connected Supabase project, run this exact file once in Supabase SQL Editor:
+
+`supabase/migrations/1.6.0-shift-availability.sql`
+
+It adds per-day Open, Close, or Both availability to phone submissions and manager review. Existing submitted days are automatically backfilled to Both. New Supabase projects receive this field and the updated RPC functions from `supabase/schema.sql`.
+
 The schema creates only the Phase 1 tables:
 
 - `employees` stores the desktop worker link, display name, hashed code, and active status.

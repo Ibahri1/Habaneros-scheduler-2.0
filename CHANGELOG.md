@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.6.0 - 2026-07-02
+
+- Added required Open, Close, or Both availability choices for each selected day in the employee phone form and desktop worker forms.
+- Updated schedule generation to respect each worker's per-day shift availability.
+- Added shift availability to local JSON normalization, JSON/CSV import and export, Supabase submissions, manager review, Apply, and Apply All.
+- Migrated legacy employees and submissions so every previously available day defaults to Both.
+- Added the required Supabase shift-availability migration for existing projects.
+
 ## 1.5.4 - 2026-07-02
 
 - Replaced renderer-blocking browser alerts and confirmations with parented Electron dialogs.

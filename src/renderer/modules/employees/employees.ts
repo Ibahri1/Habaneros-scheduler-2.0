@@ -1,6 +1,6 @@
 import { randomUUID } from "../../shared/ids";
 import { normalizeWorker } from "../../../shared/defaults";
-import { AppState, DayName, Worker } from "../../../shared/types";
+import { AppState, DayName, ShiftAvailabilityMap, Worker } from "../../../shared/types";
 
 export interface WorkerFormInput {
   employeeCode: string;
@@ -14,6 +14,7 @@ export interface WorkerFormInput {
   canClose: boolean;
   notes: string;
   availability: DayName[];
+  shiftAvailability: ShiftAvailabilityMap;
 }
 
 export function createWorker(input: WorkerFormInput, state: AppState): Worker {
@@ -32,6 +33,7 @@ export function createWorker(input: WorkerFormInput, state: AppState): Worker {
     canClose: input.canClose,
     active: true,
     notes: input.notes,
-    availability: input.availability
+    availability: input.availability,
+    shiftAvailability: input.shiftAvailability
   }, state.rules);
 }

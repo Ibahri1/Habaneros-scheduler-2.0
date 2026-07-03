@@ -3,6 +3,8 @@ export const SHORT_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as c
 
 export type DayName = typeof DAYS[number];
 export type ShiftName = "open" | "close";
+export type ShiftAvailability = "Open" | "Close" | "Both";
+export type ShiftAvailabilityMap = Partial<Record<DayName, ShiftAvailability>>;
 export type WorkerRole = "Crew" | "Lead";
 export type ExportFormat = "json" | "csv";
 export type SubmissionStatus = "pending" | "reviewed" | "applied" | "rejected";
@@ -23,6 +25,7 @@ export interface Worker {
   active: boolean;
   notes: string;
   availability: DayName[];
+  shiftAvailability: ShiftAvailabilityMap;
 }
 
 export interface StaffingRule { open: number; close: number; }
@@ -76,6 +79,7 @@ export interface AvailabilitySubmission {
   employeeName: string;
   weekStart: string;
   availableDays: DayName[];
+  shiftAvailability: ShiftAvailabilityMap;
   submittedAt: string;
   status: SubmissionStatus;
   actionAt: string | null;

@@ -1,7 +1,7 @@
-import { AvailabilitySubmission, CloudConfig, DayName, SubmissionStatus, Worker } from "../../shared/types";
+import { AvailabilitySubmission, CloudConfig, DayName, ShiftAvailabilityMap, SubmissionStatus, Worker } from "../../shared/types";
 import { callSupabaseRpc } from "./supabaseClient";
 
-interface SubmissionRow { id: string; employee_id: string; local_worker_id: string; employee_name: string; week_start: string; available_days: DayName[]; submitted_at: string; status: SubmissionStatus; action_at: string | null; manager_notes: string | null; }
+interface SubmissionRow { id: string; employee_id: string; local_worker_id: string; employee_name: string; week_start: string; available_days: DayName[]; shift_availability: ShiftAvailabilityMap | null; submitted_at: string; status: SubmissionStatus; action_at: string | null; manager_notes: string | null; }
 
 export class AvailabilityService {
   async test(config: CloudConfig): Promise<void> {
@@ -18,11 +18,11 @@ export class AvailabilityService {
 
   async list(config: CloudConfig, status: SubmissionStatus | null): Promise<AvailabilitySubmission[]> {
     const rows = await callSupabaseRpc<SubmissionRow[]>(config, "manager_list_availability_submissions", { p_status: status });
-    return rows.map((row) => ({ id: row.id, employeeId: row.employee_id, localWorkerId: row.local_worker_id, employeeName: row.employee_name, weekStart: row.week_start, availableDays: row.available_days, submittedAt: row.submitted_at, status: row.status, actionAt: row.action_at, managerNotes: row.manager_notes || "" }));
+    return rows.map((row) => ({ id: row.id, employeeId: row.employee_id, localWorkerId: row.local_worker_id, employeeName: row.employee_name, weekStart: row.week_start, availableDays: row.available_days, shiftAvailability: row.available_days.reduce((map, day) => ({ ...map, [day]: row.shift_availability?.[day] || "Both" }), {} as ShiftAvailabilityMap), submittedAt: row.submitted_at, status: row.status, actionAt: row.action_at, managerNotes: row.manager_notes || "" }));
   }
 
-  async update(config: CloudConfig, id: string, availableDays: DayName[], status: SubmissionStatus, managerNotes: string): Promise<void> {
-    await callSupabaseRpc(config, "manager_update_availability_submission", { p_submission_id: id, p_available_days: availableDays, p_status: status, p_manager_notes: managerNotes });
+  async update(config: CloudConfig, id: string, availableDays: DayName[], shiftAvailability: ShiftAvailabilityMap, status: SubmissionStatus, managerNotes: string): Promise<void> {
+    await callSupabaseRpc(config, "manager_update_availability_submission", { p_submission_id: id, p_available_days: availableDays, p_shift_availability: shiftAvailability, p_status: status, p_manager_notes: managerNotes });
   }
 
   async delete(config: CloudConfig, id: string): Promise<void> {

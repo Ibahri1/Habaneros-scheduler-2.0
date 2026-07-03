@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import { AppSettings, AppState, AvailabilitySubmission, CloudConfig, CloudResult, DayName, ExportPayload, SubmissionStatus, Worker } from "../shared/types";
+import { AppSettings, AppState, AvailabilitySubmission, CloudConfig, CloudResult, DayName, ExportPayload, ShiftAvailabilityMap, SubmissionStatus, Worker } from "../shared/types";
 
 const api = {
   loadState: (): Promise<AppState> => ipcRenderer.invoke("scheduler:load"),
@@ -19,7 +19,7 @@ const api = {
   testCloudConfig: (config: CloudConfig): Promise<CloudResult> => ipcRenderer.invoke("cloud:test", config),
   syncCloudEmployees: (workers: Worker[]): Promise<CloudResult> => ipcRenderer.invoke("cloud:employees:sync", workers),
   listAvailabilitySubmissions: (status: SubmissionStatus | null): Promise<AvailabilitySubmission[]> => ipcRenderer.invoke("cloud:submissions:list", status),
-  updateAvailabilitySubmission: (input: { id: string; availableDays: DayName[]; status: SubmissionStatus; managerNotes: string }): Promise<CloudResult> => ipcRenderer.invoke("cloud:submissions:update", input),
+  updateAvailabilitySubmission: (input: { id: string; availableDays: DayName[]; shiftAvailability: ShiftAvailabilityMap; status: SubmissionStatus; managerNotes: string }): Promise<CloudResult> => ipcRenderer.invoke("cloud:submissions:update", input),
   deleteAvailabilitySubmission: (id: string): Promise<CloudResult> => ipcRenderer.invoke("cloud:submissions:delete", { id })
 };
 

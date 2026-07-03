@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { CloudConfigRepository, SchedulerRepository } from "../database/repository";
 import { appSettingsSchema, appStateSchema, cloudConfigSchema, submissionDeleteSchema, submissionStatusSchema, submissionUpdateSchema } from "../../shared/validation";
-import { CloudConfig, ExportPayload, Worker } from "../../shared/types";
+import { CloudConfig, ExportPayload, ShiftAvailabilityMap, Worker } from "../../shared/types";
 import { AvailabilityService } from "../cloud/availabilityService";
 
 const repository = new SchedulerRepository();
@@ -76,7 +76,7 @@ export function registerSchedulerIpc(): void {
   ipcMain.handle("cloud:submissions:list", (_event, status) => availabilityService.list(cloudConfigRepository.load(), status === null ? null : submissionStatusSchema.parse(status)));
   ipcMain.handle("cloud:submissions:update", async (_event, input) => {
     const update = submissionUpdateSchema.parse(input);
-    await availabilityService.update(cloudConfigRepository.load(), update.id, update.availableDays, update.status, update.managerNotes);
+    await availabilityService.update(cloudConfigRepository.load(), update.id, update.availableDays, update.shiftAvailability as ShiftAvailabilityMap, update.status, update.managerNotes);
     return { success: true, message: "Submission updated." };
   });
   ipcMain.handle("cloud:submissions:delete", async (_event, input) => {
@@ -140,9 +140,9 @@ async function importData(): Promise<{ canceled: boolean; fileName?: string; con
 }
 
 function toCsv(payload: ExportPayload): string {
-  const rows = [["Name", "Employee Code", "Position", "Lead", "No Hour Limits", "Can Open", "Can Close", "Active", "Max Weekly Hours", "Preferred Weekly Hours", "Available Days", "Notes"]];
+  const rows = [["Name", "Employee Code", "Position", "Lead", "No Hour Limits", "Can Open", "Can Close", "Active", "Max Weekly Hours", "Preferred Weekly Hours", "Available Days", "Shift Availability", "Notes"]];
   for (const worker of payload.state.workers) {
-    rows.push([worker.name, worker.employeeCode, worker.position, worker.isManager ? "Yes" : "No", worker.noHourLimits ? "Yes" : "No", worker.canOpen ? "Yes" : "No", worker.canClose ? "Yes" : "No", worker.active ? "Yes" : "No", String(worker.maxWeeklyHours), String(worker.preferredWeeklyHours), worker.availability.join(";"), worker.notes]);
+    rows.push([worker.name, worker.employeeCode, worker.position, worker.isManager ? "Yes" : "No", worker.noHourLimits ? "Yes" : "No", worker.canOpen ? "Yes" : "No", worker.canClose ? "Yes" : "No", worker.active ? "Yes" : "No", String(worker.maxWeeklyHours), String(worker.preferredWeeklyHours), worker.availability.join(";"), worker.availability.map((day) => day + ":" + (worker.shiftAvailability[day] || "Both")).join(";"), worker.notes]);
   }
   return rows.map((row) => row.map(csvCell).join(",")).join("\n");
 }

@@ -6,9 +6,11 @@ interface AssignmentStats { hours: Record<string, number>; days: Record<string, 
 
 function shiftDuration(rules: ScheduleRules): number { return rules.shiftHours; }
 
-function canWork(worker: Worker, day: DayName, rules: ScheduleRules, stats: AssignmentStats, assignedToday: Set<string>): boolean {
+function canWork(worker: Worker, day: DayName, shiftName: ShiftName, rules: ScheduleRules, stats: AssignmentStats, assignedToday: Set<string>): boolean {
   if (!worker.active) return false;
   if (!worker.availability.includes(day)) return false;
+  const shiftAvailability = worker.shiftAvailability[day] || "Both";
+  if (shiftAvailability !== "Both" && shiftAvailability.toLowerCase() !== shiftName) return false;
   if (assignedToday.has(worker.id)) return false;
   if ((stats.days[worker.id] || 0) >= worker.maxDays) return false;
   return worker.noHourLimits || (stats.hours[worker.id] || 0) + shiftDuration(rules) <= worker.maxWeeklyHours;
@@ -52,7 +54,7 @@ function buildShift(state: AppState, day: DayName, shiftName: ShiftName, stats: 
   const needed = state.rules.staffing[day]?.[shiftName] ?? 0;
   const capability = shiftName === "open" ? "canOpen" : "canClose";
   const assigned: Worker[] = [];
-  const eligible = () => state.workers.filter((worker) => canWork(worker, day, state.rules, stats, assignedToday));
+  const eligible = () => state.workers.filter((worker) => canWork(worker, day, shiftName, state.rules, stats, assignedToday));
 
   if (needed > 0) {
     const lead = rankWorkers(eligible().filter((worker) => worker.isManager), stats)[0];

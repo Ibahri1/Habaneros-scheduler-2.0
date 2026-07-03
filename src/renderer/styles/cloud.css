@@ -34,6 +34,11 @@
 .history-list { display: grid; gap: 10px; }
 .history-row { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(210px, 1.5fr) auto; gap: 14px; align-items: center; border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
 .history-details { display: grid; gap: 4px; }
+.availability-day, .worker-availability-day { display: grid; gap: 7px; align-content: start; }
+.shift-availability { display: grid; gap: 4px; color: var(--muted); font-size: .78rem; }
+.shift-availability select { margin-top: 0; }
+.worker-availability-day .day-mini { width: 100%; }
+.worker-edit .worker-days { align-items: start; }
 
 @media (max-width: 860px) {
   .cloud-config-grid, .submission-row, .history-filters, .history-row { grid-template-columns: 1fr; }
