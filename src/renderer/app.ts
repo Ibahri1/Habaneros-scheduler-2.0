@@ -1,4 +1,4 @@
-import { defaultAppState, normalizeWorker } from "../shared/defaults";
+import { defaultAppState, defaultWorkerShiftTimes, normalizeWorker } from "../shared/defaults";
 import { DAYS, SHORT_DAYS, AvailabilitySubmission, CloudConfig, DayName, AppSettings, AppState, ExportFormat, ImportResult, ShiftAvailability, ShiftAvailabilityMap, ShiftName, ShiftSchedule, SubmissionStatus, Worker, WorkerRole } from "../shared/types";
 import { formatDate, formatDuration, formatTime, nextMonday } from "../shared/time";
 import { createWorker } from "./modules/employees/employees";
@@ -26,6 +26,10 @@ const els = {
   preferredWeeklyHours: byId<HTMLInputElement>("preferredWeeklyHours"),
   canOpen: byId<HTMLInputElement>("canOpen"),
   canClose: byId<HTMLInputElement>("canClose"),
+  workerOpenStart: byId<HTMLInputElement>("workerOpenStart"),
+  workerOpenEnd: byId<HTMLInputElement>("workerOpenEnd"),
+  workerCloseStart: byId<HTMLInputElement>("workerCloseStart"),
+  workerCloseEnd: byId<HTMLInputElement>("workerCloseEnd"),
   workerNotes: byId<HTMLTextAreaElement>("workerNotes"),
   weekStart: byId<HTMLInputElement>("weekStart"),
   openShift: byId<HTMLInputElement>("openShift"),
@@ -85,6 +89,7 @@ async function init(): Promise<void> {
   renderStaffingInputs();
   bindEvents();
   updateAddWorkerHourFields();
+  resetWorkerTimeInputs();
   render();
 }
 
@@ -111,18 +116,7 @@ function bindEvents(): void {
 }
 
 function renderAvailabilityInputs(): void {
-  els.availabilityChecks.innerHTML = DAYS.map((day) => '<div class="availability-day"><label class="day-chip"><input type="checkbox" name="availableDay" value="' + day + '"> ' + day + '</label><label class="shift-availability" data-add-shift-container="' + day + '" hidden>Which shift(s) are you available?<select name="availableShift" data-add-shift="' + day + '" disabled required><option value="">Select shift(s)</option><option value="Open">Open</option><option value="Close">Close</option><option value="Both">Both</option></select></label></div>').join("");
-  els.availabilityChecks.querySelectorAll<HTMLInputElement>("input[name='availableDay']").forEach((input) => input.addEventListener("change", () => updateAddShiftAvailability(input)));
-}
-
-function updateAddShiftAvailability(input: HTMLInputElement): void {
-  const day = input.value as DayName;
-  const container = els.availabilityChecks.querySelector<HTMLElement>("[data-add-shift-container='" + day + "']")!;
-  const select = els.availabilityChecks.querySelector<HTMLSelectElement>("[data-add-shift='" + day + "']")!;
-  container.hidden = !input.checked;
-  select.disabled = !input.checked;
-  select.required = input.checked;
-  if (!input.checked) select.value = "";
+  els.availabilityChecks.innerHTML = DAYS.map((day) => '<label class="availability-day"><span>' + day + '</span><select data-add-shift="' + day + '" required><option value="Open">Available for Open</option><option value="Close">Available for Close</option><option value="Both">Available for Both</option><option value="Unavailable" selected>Not Available on ' + day + '</option></select></label>').join("");
 }
 
 function renderStaffingInputs(): void {
@@ -164,7 +158,11 @@ async function addWorker(event: Event): Promise<void> {
       canClose: els.canClose.checked,
       notes: els.workerNotes.value,
       availability,
-      shiftAvailability
+      shiftAvailability,
+      openStart: els.workerOpenStart.value,
+      openEnd: els.workerOpenEnd.value,
+      closeStart: els.workerCloseStart.value,
+      closeEnd: els.workerCloseEnd.value
     }, state));
     resetWorkerForm();
     state.schedule = null;
@@ -176,13 +174,13 @@ async function addWorker(event: Event): Promise<void> {
 }
 
 function selectedAvailableDays(): DayName[] {
-  return [...document.querySelectorAll<HTMLInputElement>("input[name='availableDay']:checked")].map((input) => input.value as DayName);
+  return DAYS.filter((day) => els.availabilityChecks.querySelector<HTMLSelectElement>("[data-add-shift='" + day + "']")?.value !== "Unavailable");
 }
 
 function selectedShiftAvailability(days: DayName[]): ShiftAvailabilityMap {
-  return days.reduce((result, day) => {
+  return DAYS.reduce((result, day) => {
     const select = els.availabilityChecks.querySelector<HTMLSelectElement>("[data-add-shift='" + day + "']");
-    result[day] = (select?.value || "Both") as ShiftAvailability;
+    result[day] = (select?.value || (days.includes(day) ? "Both" : "Unavailable")) as ShiftAvailability;
     return result;
   }, {} as ShiftAvailabilityMap);
 }
@@ -194,7 +192,8 @@ function resetWorkerForm(): void {
   els.maxWeeklyHours.value = "45";
   els.preferredWeeklyHours.value = "40";
   updateAddWorkerHourFields();
-  els.availabilityChecks.querySelectorAll<HTMLInputElement>("input[name='availableDay']").forEach(updateAddShiftAvailability);
+  els.availabilityChecks.querySelectorAll<HTMLSelectElement>("[data-add-shift]").forEach((select) => { select.value = "Unavailable"; });
+  resetWorkerTimeInputs();
   ensureWorkerFormInteractive();
 }
 
@@ -237,16 +236,16 @@ function renderWorkers(): void {
   els.workersList.innerHTML = state.workers.map((worker) => {
     const tags = (!worker.active ? '<span class="tag bad">Inactive</span>' : '') + (worker.noHourLimits ? '<span class="tag good">No Hour Limits</span>' : '') + (worker.canOpen ? '<span class="tag good">Can Open</span>' : '') + (worker.canClose ? '<span class="tag good">Can Close</span>' : '');
     const daySummary = DAYS.map((day, index) => '<span class="day-mini ' + (worker.availability.includes(day) ? 'on' : '') + '">' + SHORT_DAYS[index] + (worker.availability.includes(day) ? ': ' + worker.shiftAvailability[day] : '') + '</span>').join("");
-    const dayEditors = DAYS.map((day, index) => '<div class="worker-availability-day"><label class="day-mini ' + (worker.availability.includes(day) ? 'on' : '') + '"><input data-edit-day="' + worker.id + '" value="' + day + '" type="checkbox" ' + checked(worker.availability.includes(day)) + '> ' + SHORT_DAYS[index] + '</label>' + (worker.availability.includes(day) ? '<label class="shift-availability">Which shift(s) are you available?<select data-edit-shift-worker="' + worker.id + '" data-edit-shift-day="' + day + '" required><option value="Open" ' + selected(worker.shiftAvailability[day] || 'Both', 'Open') + '>Open</option><option value="Close" ' + selected(worker.shiftAvailability[day] || 'Both', 'Close') + '>Close</option><option value="Both" ' + selected(worker.shiftAvailability[day] || 'Both', 'Both') + '>Both</option></select></label>' : '') + '</div>').join("");
+    const dayEditors = DAYS.map((day) => '<label class="worker-availability-day"><span>' + day + '</span><select data-edit-shift-worker="' + worker.id + '" data-edit-shift-day="' + day + '" required><option value="Open" ' + selected(worker.shiftAvailability[day] || 'Unavailable', 'Open') + '>Available for Open</option><option value="Close" ' + selected(worker.shiftAvailability[day] || 'Unavailable', 'Close') + '>Available for Close</option><option value="Both" ' + selected(worker.shiftAvailability[day] || 'Unavailable', 'Both') + '>Available for Both</option><option value="Unavailable" ' + selected(worker.shiftAvailability[day] || 'Unavailable', 'Unavailable') + '>Not Available on ' + day + '</option></select></label>').join("");
     const hourSummary = worker.noHourLimits ? 'No hour limits' : worker.preferredWeeklyHours + ' preferred hrs | ' + worker.maxWeeklyHours + ' max hrs';
-    return '<article class="worker-card ' + (!worker.active ? 'inactive' : '') + '"><div class="worker-top"><div><h3>' + escapeHtml(worker.name) + '</h3><div class="meta">Code ' + escapeHtml(worker.employeeCode || 'Not set') + ' | ' + escapeHtml(worker.position) + (worker.isManager ? ' | Lead' : '') + ' | ' + hourSummary + '</div></div><div class="card-actions"><button class="secondary" type="button" data-toggle-active="' + worker.id + '">' + (worker.active ? 'Deactivate' : 'Activate') + '</button><button class="secondary danger" type="button" data-delete="' + worker.id + '">Delete</button></div></div><div class="tag-row">' + tags + '</div>' + (worker.notes ? '<div class="meta">Notes: ' + escapeHtml(worker.notes) + '</div>' : '') + '<div class="worker-days">' + daySummary + '</div><div class="worker-edit"><label>Employee code <input data-edit="' + worker.id + '" data-field="employeeCode" type="text" inputmode="numeric" pattern="\\d{4}" maxlength="4" value="' + escapeHtml(worker.employeeCode) + '"></label><label>Position <input data-edit="' + worker.id + '" data-field="position" type="text" value="' + escapeHtml(worker.position) + '"></label><label>Lead <select data-edit="' + worker.id + '" data-field="isManager"><option value="false" ' + selected(String(worker.isManager), 'false') + '>No</option><option value="true" ' + selected(String(worker.isManager), 'true') + '>Yes</option></select></label><label class="check-row full"><input data-edit="' + worker.id + '" data-field="noHourLimits" type="checkbox" ' + checked(worker.noHourLimits) + '> No Hour Limits</label><label>Preferred Weekly Hours <input data-edit="' + worker.id + '" data-field="preferredWeeklyHours" type="number" min="0" max="168" step="0.5" value="' + worker.preferredWeeklyHours + '" ' + disabled(worker.noHourLimits) + '></label><label>Maximum Weekly Hours <input data-edit="' + worker.id + '" data-field="maxWeeklyHours" type="number" min="0" max="168" step="0.5" value="' + worker.maxWeeklyHours + '" ' + disabled(worker.noHourLimits) + '></label><label class="check-row"><input data-edit="' + worker.id + '" data-field="canOpen" type="checkbox" ' + checked(worker.canOpen) + '> Can Open</label><label class="check-row"><input data-edit="' + worker.id + '" data-field="canClose" type="checkbox" ' + checked(worker.canClose) + '> Can Close</label><label class="full">Notes <textarea data-edit="' + worker.id + '" data-field="notes" rows="2">' + escapeHtml(worker.notes) + '</textarea></label><div class="full worker-days">' + dayEditors + '</div></div></article>';
+    return '<article class="worker-card ' + (!worker.active ? 'inactive' : '') + '"><div class="worker-top"><div><h3>' + escapeHtml(worker.name) + '</h3><div class="meta">Code ' + escapeHtml(worker.employeeCode || 'Not set') + ' | ' + escapeHtml(worker.position) + (worker.isManager ? ' | Lead' : '') + ' | ' + hourSummary + '</div></div><div class="card-actions"><button class="secondary" type="button" data-toggle-active="' + worker.id + '">' + (worker.active ? 'Deactivate' : 'Activate') + '</button><button class="secondary danger" type="button" data-delete="' + worker.id + '">Delete</button></div></div><div class="tag-row">' + tags + '</div>' + (worker.notes ? '<div class="meta">Notes: ' + escapeHtml(worker.notes) + '</div>' : '') + '<div class="worker-days">' + daySummary + '</div><div class="worker-edit"><label>Employee code <input data-edit="' + worker.id + '" data-field="employeeCode" type="text" inputmode="numeric" pattern="\\d{4}" maxlength="4" value="' + escapeHtml(worker.employeeCode) + '"></label><label>Position <input data-edit="' + worker.id + '" data-field="position" type="text" value="' + escapeHtml(worker.position) + '"></label><label>Lead <select data-edit="' + worker.id + '" data-field="isManager"><option value="false" ' + selected(String(worker.isManager), 'false') + '>No</option><option value="true" ' + selected(String(worker.isManager), 'true') + '>Yes</option></select></label><label class="check-row full"><input data-edit="' + worker.id + '" data-field="noHourLimits" type="checkbox" ' + checked(worker.noHourLimits) + '> No Hour Limits</label><label>Preferred Weekly Hours <input data-edit="' + worker.id + '" data-field="preferredWeeklyHours" type="number" min="0" max="168" step="0.5" value="' + worker.preferredWeeklyHours + '" ' + disabled(worker.noHourLimits) + '></label><label>Maximum Weekly Hours <input data-edit="' + worker.id + '" data-field="maxWeeklyHours" type="number" min="0" max="168" step="0.5" value="' + worker.maxWeeklyHours + '" ' + disabled(worker.noHourLimits) + '></label><label class="check-row"><input data-edit="' + worker.id + '" data-field="canOpen" type="checkbox" ' + checked(worker.canOpen) + '> Can Open</label><label class="check-row"><input data-edit="' + worker.id + '" data-field="canClose" type="checkbox" ' + checked(worker.canClose) + '> Can Close</label><div class="full time-grid"><label>Default Open Start <input data-worker-time="' + worker.id + '" data-shift="open" data-part="start" type="time" value="' + worker.shiftTimes.open.start + '"></label><label>Default Open End <input data-worker-time="' + worker.id + '" data-shift="open" data-part="end" type="time" value="' + worker.shiftTimes.open.end + '"></label><label>Default Close Start <input data-worker-time="' + worker.id + '" data-shift="close" data-part="start" type="time" value="' + worker.shiftTimes.close.start + '"></label><label>Default Close End <input data-worker-time="' + worker.id + '" data-shift="close" data-part="end" type="time" value="' + worker.shiftTimes.close.end + '"></label></div><label class="full">Notes <textarea data-edit="' + worker.id + '" data-field="notes" rows="2">' + escapeHtml(worker.notes) + '</textarea></label><div class="full worker-days">' + dayEditors + '</div></div></article>';
   }).join("");
 
   els.workersList.querySelectorAll<HTMLButtonElement>("[data-toggle-active]").forEach((button) => button.addEventListener("click", () => void toggleWorkerActive(button.dataset.toggleActive!)));
   els.workersList.querySelectorAll<HTMLButtonElement>("[data-delete]").forEach((button) => button.addEventListener("click", () => void deleteWorker(button.dataset.delete!)));
   els.workersList.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("[data-edit]").forEach((input) => input.addEventListener("change", () => void editWorker(input)));
-  els.workersList.querySelectorAll<HTMLInputElement>("[data-edit-day]").forEach((input) => input.addEventListener("change", () => void editWorkerDay(input)));
   els.workersList.querySelectorAll<HTMLSelectElement>("[data-edit-shift-worker]").forEach((input) => input.addEventListener("change", () => void editWorkerShiftAvailability(input)));
+  els.workersList.querySelectorAll<HTMLInputElement>("[data-worker-time]").forEach((input) => input.addEventListener("change", () => void editWorkerDefaultTime(input)));
 }
 
 function selected(current: string, value: string): string { return current === value ? "selected" : ""; }
@@ -293,22 +292,23 @@ async function editWorker(input: HTMLInputElement | HTMLSelectElement | HTMLText
   await saveStateAndRender();
 }
 
-async function editWorkerDay(input: HTMLInputElement): Promise<void> {
-  const worker = findWorker(input.dataset.editDay || "");
+async function editWorkerShiftAvailability(input: HTMLSelectElement): Promise<void> {
+  const worker = findWorker(input.dataset.editShiftWorker || "");
+  const day = input.dataset.editShiftDay as DayName;
   if (!worker) return;
-  worker.availability = toggleAvailability(worker.availability, input.value as DayName, input.checked);
-  if (input.checked) worker.shiftAvailability[input.value as DayName] = "Both";
-  else delete worker.shiftAvailability[input.value as DayName];
+  const value = input.value as ShiftAvailability;
+  worker.shiftAvailability[day] = value;
+  worker.availability = toggleAvailability(worker.availability, day, value !== "Unavailable");
   state.schedule = null;
   await saveStateAndRender();
 }
 
-async function editWorkerShiftAvailability(input: HTMLSelectElement): Promise<void> {
-  const worker = findWorker(input.dataset.editShiftWorker || "");
-  const day = input.dataset.editShiftDay as DayName;
-  if (!worker || !worker.availability.includes(day)) return;
-  worker.shiftAvailability[day] = input.value as ShiftAvailability;
-  state.schedule = null;
+async function editWorkerDefaultTime(input: HTMLInputElement): Promise<void> {
+  const worker = findWorker(input.dataset.workerTime || "");
+  if (!worker) return;
+  const shift = input.dataset.shift === "close" ? "close" : "open";
+  const part = input.dataset.part === "end" ? "end" : "start";
+  worker.shiftTimes[shift][part] = input.value;
   await saveStateAndRender();
 }
 
@@ -486,7 +486,7 @@ function importCsv(content: string): ImportResult {
     const name = get("name") || get("employee name");
     if (!name.trim()) { skipped++; continue; }
     const isLead = yes(get("lead")) || yes(get("manager"));
-    const worker = normalizeWorker({ id: crypto.randomUUID(), employeeCode: get("employee code"), name, position: get("position") || "Crew", role: isLead ? "Lead" : "Crew", isManager: isLead, noHourLimits: yes(get("no hour limits")), maxWeeklyHours: Number(get("max weekly hours")) || 45, preferredWeeklyHours: Number(get("preferred weekly hours")) || 40, maxDays: 7, canOpen: yes(get("can open")), canClose: yes(get("can close")), active: !no(get("active")), notes: get("notes"), availability: splitDays(get("available days")), shiftAvailability: splitShiftAvailability(get("shift availability")) }, state.rules);
+    const worker = normalizeWorker({ id: crypto.randomUUID(), employeeCode: get("employee code"), name, position: get("position") || "Crew", role: isLead ? "Lead" : "Crew", isManager: isLead, noHourLimits: yes(get("no hour limits")), maxWeeklyHours: Number(get("max weekly hours")) || 45, preferredWeeklyHours: Number(get("preferred weekly hours")) || 40, maxDays: 7, canOpen: yes(get("can open")), canClose: yes(get("can close")), active: !no(get("active")), notes: get("notes"), availability: splitDays(get("available days")), shiftAvailability: splitShiftAvailability(get("shift availability")), shiftTimes: { open: { start: get("default open start"), end: get("default open end") }, close: { start: get("default close start"), end: get("default close end") } } }, state.rules);
     if (mergeWorker(worker)) imported++; else skipped++;
   }
   return { imported, skipped, messages: skipped ? [String(skipped) + " duplicate or invalid row(s) skipped."] : [] };
@@ -523,7 +523,7 @@ function parseCsv(content: string): string[][] {
 function yes(value: string): boolean { return ["yes", "true", "1", "y"].includes(value.trim().toLowerCase()); }
 function no(value: string): boolean { return ["no", "false", "0", "n", "inactive"].includes(value.trim().toLowerCase()); }
 function splitDays(value: string): DayName[] { const parts = value.split(/[;,|]/).map((item) => item.trim().toLowerCase()); return DAYS.filter((day) => parts.includes(day.toLowerCase()) || parts.includes(day.slice(0, 3).toLowerCase())); }
-function splitShiftAvailability(value: string): ShiftAvailabilityMap { const result: ShiftAvailabilityMap = {}; value.split(/[;|]/).forEach((item) => { const [dayText, shiftText] = item.split(":").map((part) => part.trim()); const day = DAYS.find((candidate) => candidate.toLowerCase() === dayText?.toLowerCase()); const shift = ["Open", "Close", "Both"].find((candidate) => candidate.toLowerCase() === shiftText?.toLowerCase()) as ShiftAvailability | undefined; if (day && shift) result[day] = shift; }); return result; }
+function splitShiftAvailability(value: string): ShiftAvailabilityMap { const result: ShiftAvailabilityMap = {}; value.split(/[;|]/).forEach((item) => { const [dayText, shiftText] = item.split(":").map((part) => part.trim()); const day = DAYS.find((candidate) => candidate.toLowerCase() === dayText?.toLowerCase()); const shift = ["Open", "Close", "Both", "Unavailable"].find((candidate) => candidate.toLowerCase() === shiftText?.toLowerCase()) as ShiftAvailability | undefined; if (day && shift) result[day] = shift; }); return result; }
 
 function renderCloudConfig(): void {
   els.supabaseUrl.value = cloudConfig.supabaseUrl;
@@ -578,26 +578,19 @@ function renderSubmissions(): void {
   els.submissionCount.textContent = pending.length + " pending";
   els.applyAllBtn.disabled = pending.length === 0;
   if (!pending.length) { els.submissionsList.innerHTML = '<div class="empty-state">No pending availability submissions.</div>'; return; }
-  els.submissionsList.innerHTML = pending.map((submission) => '<article class="submission-row"><div><strong>' + escapeHtml(submission.employeeName) + '</strong><div class="meta">Week of ' + formatWeek(submission.weekStart) + '</div><div class="status-line">Submitted ' + formatSubmittedAt(submission.submittedAt) + '</div></div><div class="submission-days">' + DAYS.map((day, index) => '<div class="worker-availability-day"><label class="day-mini ' + (submission.availableDays.includes(day) ? 'on' : '') + '"><input data-submission-day="' + submission.id + '" value="' + day + '" type="checkbox" ' + checked(submission.availableDays.includes(day)) + '> ' + SHORT_DAYS[index] + '</label>' + (submission.availableDays.includes(day) ? '<label class="shift-availability">Which shift(s) are you available?<select data-submission-shift="' + submission.id + '" data-submission-shift-day="' + day + '"><option value="Open" ' + selected(submission.shiftAvailability[day] || 'Both', 'Open') + '>Open</option><option value="Close" ' + selected(submission.shiftAvailability[day] || 'Both', 'Close') + '>Close</option><option value="Both" ' + selected(submission.shiftAvailability[day] || 'Both', 'Both') + '>Both</option></select></label>' : '') + '</div>').join("") + '</div><div class="submission-actions"><button class="primary" data-submission-action="apply" data-submission-id="' + submission.id + '" type="button">Apply</button><button class="secondary" data-submission-action="reviewed" data-submission-id="' + submission.id + '" type="button">Mark Reviewed</button><button class="secondary danger" data-submission-action="rejected" data-submission-id="' + submission.id + '" type="button">Reject</button></div><label class="submission-notes">Manager Notes <textarea data-submission-notes="' + submission.id + '" rows="2" maxlength="1000" placeholder="Optional notes">' + escapeHtml(submission.managerNotes) + '</textarea></label></article>').join("");
-  els.submissionsList.querySelectorAll<HTMLInputElement>("[data-submission-day]").forEach((input) => input.addEventListener("change", () => editSubmissionDay(input)));
+  els.submissionsList.innerHTML = pending.map((submission) => '<article class="submission-row"><div><strong>' + escapeHtml(submission.employeeName) + '</strong><div class="meta">Week of ' + formatWeek(submission.weekStart) + '</div><div class="status-line">Submitted ' + formatSubmittedAt(submission.submittedAt) + '</div></div><div class="submission-days">' + DAYS.map((day) => '<label class="worker-availability-day"><span>' + day + '</span><select data-submission-shift="' + submission.id + '" data-submission-shift-day="' + day + '"><option value="Open" ' + selected(submission.shiftAvailability[day] || 'Unavailable', 'Open') + '>Available for Open</option><option value="Close" ' + selected(submission.shiftAvailability[day] || 'Unavailable', 'Close') + '>Available for Close</option><option value="Both" ' + selected(submission.shiftAvailability[day] || 'Unavailable', 'Both') + '>Available for Both</option><option value="Unavailable" ' + selected(submission.shiftAvailability[day] || 'Unavailable', 'Unavailable') + '>Not Available on ' + day + '</option></select></label>').join("") + '</div><div class="submission-actions"><button class="primary" data-submission-action="apply" data-submission-id="' + submission.id + '" type="button">Apply</button><button class="secondary" data-submission-action="reviewed" data-submission-id="' + submission.id + '" type="button">Mark Reviewed</button><button class="secondary danger" data-submission-action="rejected" data-submission-id="' + submission.id + '" type="button">Reject</button></div><label class="submission-notes">Manager Notes <textarea data-submission-notes="' + submission.id + '" rows="2" maxlength="1000" placeholder="Optional notes">' + escapeHtml(submission.managerNotes) + '</textarea></label></article>').join("");
   els.submissionsList.querySelectorAll<HTMLSelectElement>("[data-submission-shift]").forEach((input) => input.addEventListener("change", () => editSubmissionShift(input)));
   els.submissionsList.querySelectorAll<HTMLTextAreaElement>("[data-submission-notes]").forEach((input) => input.addEventListener("input", () => editSubmissionNotes(input)));
   els.submissionsList.querySelectorAll<HTMLButtonElement>("[data-submission-action]").forEach((button) => button.addEventListener("click", () => void handleSubmission(button)));
 }
 
-function editSubmissionDay(input: HTMLInputElement): void {
-  const submission = submissions.find((item) => item.id === input.dataset.submissionDay);
-  if (!submission) return;
-  submission.availableDays = toggleAvailability(submission.availableDays, input.value as DayName, input.checked);
-  if (input.checked) submission.shiftAvailability[input.value as DayName] = "Both";
-  else delete submission.shiftAvailability[input.value as DayName];
-  renderSubmissions();
-}
-
 function editSubmissionShift(input: HTMLSelectElement): void {
   const submission = submissions.find((item) => item.id === input.dataset.submissionShift);
   const day = input.dataset.submissionShiftDay as DayName;
-  if (submission?.availableDays.includes(day)) submission.shiftAvailability[day] = input.value as ShiftAvailability;
+  if (!submission) return;
+  const value = input.value as ShiftAvailability;
+  submission.shiftAvailability[day] = value;
+  submission.availableDays = toggleAvailability(submission.availableDays, day, value !== "Unavailable");
 }
 
 function editSubmissionNotes(input: HTMLTextAreaElement): void {
@@ -721,6 +714,14 @@ async function saveState(): Promise<void> {
   } finally {
     ensureWorkerFormInteractive();
   }
+}
+
+function resetWorkerTimeInputs(): void {
+  const defaults = defaultWorkerShiftTimes(state.rules);
+  els.workerOpenStart.value = defaults.open.start;
+  els.workerOpenEnd.value = defaults.open.end;
+  els.workerCloseStart.value = defaults.close.start;
+  els.workerCloseEnd.value = defaults.close.end;
 }
 
 function showError(message: string, error: unknown): void {

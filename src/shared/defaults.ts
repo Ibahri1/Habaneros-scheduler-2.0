@@ -1,4 +1,5 @@
-import { AppSettings, AppState, DAYS, ScheduleRules, Worker, WorkerRole } from "./types";
+import { AppSettings, AppState, DAYS, ScheduleRules, Worker, WorkerRole, WorkerShiftTimes } from "./types";
+import { addHoursToTime } from "./time";
 
 export function defaultRules(): ScheduleRules {
   return {
@@ -22,6 +23,14 @@ export function defaultAppState(): AppState {
   return { workers: [], rules: defaultRules(), schedule: null };
 }
 
+export function defaultWorkerShiftTimes(rules: ScheduleRules): WorkerShiftTimes {
+  const hours = Number(rules.shiftHours) || 8;
+  return {
+    open: { start: rules.openShift || "08:00", end: addHoursToTime(rules.openShift || "08:00", hours) },
+    close: { start: rules.closeShift || "16:00", end: addHoursToTime(rules.closeShift || "16:00", hours) }
+  };
+}
+
 function normalizeRole(role: unknown, position: string, isManager: boolean): WorkerRole {
   if (role === "Manager" || role === "Lead" || isManager) return "Lead";
   if (role === "Lead") return "Lead";
@@ -36,11 +45,13 @@ export function normalizeWorker(worker: Partial<Worker> & { id: string; name: st
   const role = normalizeRole(worker.role, position, isManager);
   const maxWeeklyHours = Number(worker.maxWeeklyHours || 40);
   const availability = worker.availability || [];
-  const shiftAvailability = availability.reduce((result, day) => {
+  const shiftAvailability = DAYS.reduce((result, day) => {
     const value = worker.shiftAvailability?.[day];
-    result[day] = value === "Open" || value === "Close" || value === "Both" ? value : "Both";
+    result[day] = availability.includes(day) ? (value === "Open" || value === "Close" || value === "Both" ? value : "Both") : "Unavailable";
     return result;
   }, {} as Worker["shiftAvailability"]);
+  const defaultTimes = defaultWorkerShiftTimes(rules);
+  const timeValue = (value: unknown, fallback: string) => /^\d{2}:\d{2}$/.test(String(value || "")) ? String(value) : fallback;
   return {
     id: worker.id,
     employeeCode: /^\d{4}$/.test(String(worker.employeeCode || "")) ? String(worker.employeeCode) : "",
@@ -57,6 +68,10 @@ export function normalizeWorker(worker: Partial<Worker> & { id: string; name: st
     active: worker.active !== false,
     notes: String(worker.notes || ""),
     availability,
-    shiftAvailability
+    shiftAvailability,
+    shiftTimes: {
+      open: { start: timeValue(worker.shiftTimes?.open?.start, defaultTimes.open.start), end: timeValue(worker.shiftTimes?.open?.end, defaultTimes.open.end) },
+      close: { start: timeValue(worker.shiftTimes?.close?.start, defaultTimes.close.start), end: timeValue(worker.shiftTimes?.close?.end, defaultTimes.close.end) }
+    }
   };
 }

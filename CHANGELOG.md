@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.7.0 - 2026-07-02
+
+- Replaced phone and desktop availability checkboxes with seven required daily availability selectors.
+- Added explicit Available for Open, Available for Close, Available for Both, and Not Available choices for every day.
+- Restored employee default open and close shift-time templates in Add Worker and Edit Worker profiles.
+- Updated generation, weekly-hour calculations, and lunch reminders to use employee template times while preserving editable schedule copies.
+- Added default shift templates and explicit unavailable values to JSON/CSV import and export.
+- Added a Supabase migration that stores all seven daily choices and backfills legacy records safely.
+
 ## 1.6.0 - 2026-07-02
 
 - Added required Open, Close, or Both availability choices for each selected day in the employee phone form and desktop worker forms.

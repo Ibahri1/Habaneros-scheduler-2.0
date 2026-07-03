@@ -113,6 +113,14 @@ For an existing connected Supabase project, run this exact file once in Supabase
 
 It adds per-day Open, Close, or Both availability to phone submissions and manager review. Existing submitted days are automatically backfilled to Both. New Supabase projects receive this field and the updated RPC functions from `supabase/schema.sql`.
 
+### Required 1.7.0 Database Update
+
+For an existing connected Supabase project, run this exact file once in Supabase SQL Editor:
+
+`supabase/migrations/1.7.0-explicit-daily-availability.sql`
+
+Run only that migration for this update; do not rerun `schema.sql`. It records all seven daily choices, permits the explicit Unavailable value, and backfills legacy submissions so old available days become Both and old unavailable days become Unavailable.
+
 The schema creates only the Phase 1 tables:
 
 - `employees` stores the desktop worker link, display name, hashed code, and active status.
@@ -187,9 +195,9 @@ Add business logic in a module folder, expose persistence through `src/main/data
 
 ## Employee And Schedule Data
 
-Employee profiles store permanent information only: identity, employee code, position, lead status, availability, qualifications, hour preferences, active status, and notes. Availability may be empty when a worker is first created.
+Employee profiles store permanent information: identity, employee code, position, lead status, seven-day Open/Close/Both/Unavailable choices, qualifications, hour preferences, default open/close shift templates, active status, and notes.
 
-Shift start and end times live only on generated schedule assignments. After generating a schedule, use the inline controls to change the employee, day, shift, start time, or end time. Duplicate copies an assignment to the next day; Remove deletes only that schedule assignment. These edits save immediately and never update employee profiles or generate a new schedule. Printed schedules use the saved edited assignments.
+Employee default shift times are copied into newly generated assignments. After generating a schedule, use the inline controls to change the employee, day, shift, start time, or end time. These edits save immediately and never update employee profile templates or generate a new schedule. Printed schedules use the saved edited assignments.
 
 ## Notes
 
@@ -200,9 +208,9 @@ Git was not available in the original execution environment, so commits could no
 After running `npm run dev`, verify these workflows:
 
 1. Dark Mode: toggle Dark Mode in the header, close the app, reopen it, and confirm the theme is restored.
-2. Available Days: add a worker with selected days, reopen the app, and confirm the same days are selected/displayed.
-3. Add Worker: enter name, position, lead status, opening/closing permissions, max/preferred hours, notes, and optional availability. Confirm the worker appears immediately even when no days are selected.
-4. Edit Worker: change position, lead status, hours, permissions, notes, and availability from the worker card. Confirm changes persist after restart.
+2. Availability: choose Open, Close, Both, or Not Available for all seven days, reopen the app, and confirm the choices persist.
+3. Add Worker: enter name, position, lead status, opening/closing permissions, max/preferred hours, notes, seven-day availability, and default open/close times.
+4. Edit Worker: change position, lead status, hours, permissions, notes, availability, and default shift templates. Confirm changes persist after restart without altering an existing generated schedule.
 5. Deactivate Worker: click Deactivate and confirm the worker remains visible but is not scheduled. Click Activate to restore.
 6. Delete Worker: delete a worker and confirm it is removed after restart.
 7. Generate Schedule: add employees with different availability and permissions, generate a schedule, and review any warnings.
@@ -210,5 +218,5 @@ After running `npm run dev`, verify these workflows:
 9. Export JSON/CSV: click each export button, choose a location, and confirm files are created.
 10. Import JSON/CSV: import a backup or CSV employee list and confirm duplicates are skipped with a summary.
 11. Clear Schedule: generate a schedule, click Clear, and confirm only the generated schedule is removed. Confirm employees, availability, employee codes, cloud submissions, and settings remain unchanged.
-12. Edit Schedule: change an assignment's employee, day, shift, start time, and end time. Duplicate it to the next day, remove another assignment, restart the app, and confirm the edited schedule is preserved.
+12. Edit Schedule: change an assignment's employee, day, shift, start time, and end time, restart the app, and confirm the edited schedule is preserved independently from employee default times.
 13. Print Edited Schedule: print after making schedule edits and confirm the selected employees, moved assignments, and custom times match the on-screen schedule.

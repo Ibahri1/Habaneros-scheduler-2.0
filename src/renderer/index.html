@@ -41,7 +41,8 @@
           <label class="check-row"><input id="canOpen" type="checkbox"> Opening</label>
           <label class="check-row"><input id="canClose" type="checkbox"> Closing</label>
         </fieldset>
-        <fieldset><legend>Available days</legend><div id="availabilityChecks" class="day-checks"></div></fieldset>
+        <fieldset><legend>Availability</legend><div id="availabilityChecks" class="day-checks"></div></fieldset>
+        <fieldset><legend>Default employee shift times</legend><div class="time-grid"><label>Default Open Start <input id="workerOpenStart" type="time" required></label><label>Default Open End <input id="workerOpenEnd" type="time" required></label><label>Default Close Start <input id="workerCloseStart" type="time" required></label><label>Default Close End <input id="workerCloseEnd" type="time" required></label></div></fieldset>
         <label>Notes <textarea id="workerNotes" rows="3" placeholder="Optional notes"></textarea></label>
         <button type="submit" class="primary">Add Worker</button>
       </form>

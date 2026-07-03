@@ -15,6 +15,10 @@ export interface WorkerFormInput {
   notes: string;
   availability: DayName[];
   shiftAvailability: ShiftAvailabilityMap;
+  openStart: string;
+  openEnd: string;
+  closeStart: string;
+  closeEnd: string;
 }
 
 export function createWorker(input: WorkerFormInput, state: AppState): Worker {
@@ -34,6 +38,7 @@ export function createWorker(input: WorkerFormInput, state: AppState): Worker {
     active: true,
     notes: input.notes,
     availability: input.availability,
-    shiftAvailability: input.shiftAvailability
+    shiftAvailability: input.shiftAvailability,
+    shiftTimes: { open: { start: input.openStart, end: input.openEnd }, close: { start: input.closeStart, end: input.closeEnd } }
   }, state.rules);
 }

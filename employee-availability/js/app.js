@@ -12,8 +12,7 @@ const weekStart = document.getElementById("weekStart");
 const message = document.getElementById("message");
 let verifiedCode = "";
 
-document.getElementById("days").innerHTML = DAYS.map((day) => '<div class="day-row"><label class="day"><input type="checkbox" name="day" value="' + day + '"> ' + day + '</label><label class="shift-choice" data-shift-container="' + day + '" hidden>Which shift(s) are you available?<select data-shift-day="' + day + '" disabled required><option value="">Select shift(s)</option><option value="Open">Open</option><option value="Close">Close</option><option value="Both">Both</option></select></label></div>').join("");
-document.querySelectorAll("input[name='day']").forEach((input) => input.addEventListener("change", () => updateShiftChoice(input)));
+document.getElementById("days").innerHTML = DAYS.map((day) => '<label class="day-row"><strong>' + day + '</strong><select data-shift-day="' + day + '" required><option value="">Choose availability</option><option value="Open">Available for Open</option><option value="Close">Available for Close</option><option value="Both">Available for Both</option><option value="Unavailable">Not Available on ' + day + '</option></select></label>').join("");
 populateWeeks();
 
 codeForm.addEventListener("submit", async (event) => {
@@ -34,8 +33,8 @@ codeForm.addEventListener("submit", async (event) => {
 
 availabilityForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const availableDays = [...document.querySelectorAll("input[name='day']:checked")].map((input) => input.value);
-  const shiftAvailability = Object.fromEntries(availableDays.map((day) => [day, document.querySelector("[data-shift-day='" + day + "']").value]));
+  const shiftAvailability = Object.fromEntries(DAYS.map((day) => [day, document.querySelector("[data-shift-day='" + day + "']").value]));
+  const availableDays = DAYS.filter((day) => shiftAvailability[day] !== "Unavailable");
   try {
     setBusy(true);
     await rpc("submit_employee_availability", { p_employee_code: verifiedCode, p_week_start: weekStart.value, p_available_days: availableDays, p_shift_availability: shiftAvailability });
@@ -49,7 +48,6 @@ availabilityForm.addEventListener("submit", async (event) => {
 document.getElementById("startOver").addEventListener("click", resetLogin);
 document.getElementById("submitAnother").addEventListener("click", () => {
   availabilityForm.reset();
-  resetShiftChoices();
   populateWeeks();
   showPanel(availabilityPanel);
   showMessage("");
@@ -59,7 +57,6 @@ function resetLogin() {
   verifiedCode = "";
   codeInput.value = "";
   availabilityForm.reset();
-  resetShiftChoices();
   populateWeeks();
   showPanel(loginPanel);
   showMessage("");
@@ -70,18 +67,6 @@ function populateWeeks() {
   weekStart.innerHTML = upcomingSundays().map((date) => '<option value="' + toIsoDate(date) + '">Week of ' + formatDate(date) + '</option>').join("");
 }
 
-function updateShiftChoice(input) {
-  const container = document.querySelector("[data-shift-container='" + input.value + "']");
-  const select = document.querySelector("[data-shift-day='" + input.value + "']");
-  container.hidden = !input.checked;
-  select.disabled = !input.checked;
-  select.required = input.checked;
-  if (!input.checked) select.value = "";
-}
-
-function resetShiftChoices() {
-  document.querySelectorAll("input[name='day']").forEach(updateShiftChoice);
-}
 
 function showPanel(panel) { [loginPanel, availabilityPanel, successPanel].forEach((item) => { item.hidden = item !== panel; }); }
 function showMessage(text) { message.textContent = text; }
