@@ -7,6 +7,7 @@ export interface WorkerFormInput {
   name: string;
   position: string;
   isManager: boolean;
+  skillRating: number;
   noHourLimits: boolean;
   maxWeeklyHours: number;
   preferredWeeklyHours: number;
@@ -29,6 +30,7 @@ export function createWorker(input: WorkerFormInput, state: AppState): Worker {
     position: input.position.trim() || "Crew",
     role: input.isManager ? "Lead" : "Crew",
     isManager: input.isManager,
+    skillRating: input.skillRating,
     noHourLimits: input.noHourLimits,
     maxWeeklyHours: input.maxWeeklyHours,
     preferredWeeklyHours: input.preferredWeeklyHours,

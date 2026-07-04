@@ -195,9 +195,11 @@ Add business logic in a module folder, expose persistence through `src/main/data
 
 ## Employee And Schedule Data
 
-Employee profiles store permanent information: identity, employee code, position, lead status, seven-day Open/Close/Both/Unavailable choices, qualifications, hour preferences, default open/close shift templates, active status, and notes.
+Employee profiles store permanent information: identity, employee code, position, lead status, skill rating, seven-day Open/Close/Both/Unavailable choices, qualifications, hour preferences, default open/close shift templates, active status, and notes.
 
 Employee default shift times are copied into newly generated assignments. After generating a schedule, use the inline controls to change the employee, day, shift, start time, or end time. These edits save immediately and never update employee profile templates or generate a new schedule. Printed schedules use the saved edited assignments.
+
+Generated schedules are saved as immutable Schedule History snapshots. History entries can be viewed, printed, renamed, or loaded as a copy into the existing schedule editor. Saving history modifications creates a new snapshot and keeps the original unchanged.
 
 ## Notes
 

@@ -1,6 +1,6 @@
 import { defaultAppState, defaultWorkerShiftTimes, normalizeWorker } from "../shared/defaults";
-import { DAYS, SHORT_DAYS, AvailabilitySubmission, CloudConfig, DayName, AppSettings, AppState, ExportFormat, ImportResult, ShiftAvailability, ShiftAvailabilityMap, ShiftName, ShiftSchedule, SubmissionStatus, Worker, WorkerRole } from "../shared/types";
-import { formatDate, formatDuration, formatTime, nextMonday } from "../shared/time";
+import { DAYS, SHORT_DAYS, AvailabilitySubmission, CloudConfig, DayName, AppSettings, AppState, ExportFormat, ImportResult, ScheduleHistoryEntry, ShiftAvailability, ShiftAvailabilityMap, ShiftName, ShiftSchedule, SubmissionStatus, Worker, WorkerRole } from "../shared/types";
+import { addDays, formatDate, formatDuration, formatTime, nextMonday } from "../shared/time";
 import { createWorker } from "./modules/employees/employees";
 import { toggleAvailability } from "./modules/availability/availability";
 import { generateSchedule } from "./modules/scheduling/scheduler";
@@ -13,6 +13,7 @@ let state: AppState = defaultAppState();
 let settings: AppSettings = { darkMode: false, confirmBeforeClose: true };
 let cloudConfig: CloudConfig = { supabaseUrl: "", anonKey: "" };
 let submissions: AvailabilitySubmission[] = [];
+let historyEditSourceId: string | null = null;
 
 const els = {
   availabilityChecks: byId<HTMLDivElement>("availabilityChecks"),
@@ -21,6 +22,7 @@ const els = {
   employeeCode: byId<HTMLInputElement>("employeeCode"),
   workerPosition: byId<HTMLInputElement>("workerPosition"),
   isManager: byId<HTMLSelectElement>("isManager"),
+  skillRating: byId<HTMLInputElement>("skillRating"),
   noHourLimits: byId<HTMLInputElement>("noHourLimits"),
   maxWeeklyHours: byId<HTMLInputElement>("maxWeeklyHours"),
   preferredWeeklyHours: byId<HTMLInputElement>("preferredWeeklyHours"),
@@ -62,7 +64,14 @@ const els = {
   historyEmployeeFilter: byId<HTMLSelectElement>("historyEmployeeFilter"),
   historyWeekFilter: byId<HTMLSelectElement>("historyWeekFilter"),
   historyStatusFilter: byId<HTMLSelectElement>("historyStatusFilter"),
-  historyList: byId<HTMLDivElement>("historyList")
+  historyList: byId<HTMLDivElement>("historyList"),
+  scheduleHistoryCount: byId<HTMLSpanElement>("scheduleHistoryCount"),
+  saveCurrentScheduleBtn: byId<HTMLButtonElement>("saveCurrentScheduleBtn"),
+  scheduleHistoryList: byId<HTMLDivElement>("scheduleHistoryList"),
+  scheduleHistoryEditor: byId<HTMLDivElement>("scheduleHistoryEditor"),
+  historyEditName: byId<HTMLInputElement>("historyEditName"),
+  historyEditWeek: byId<HTMLInputElement>("historyEditWeek"),
+  saveHistoryModificationsBtn: byId<HTMLButtonElement>("saveHistoryModificationsBtn")
 };
 
 const workerIdentityFields = [els.workerName, els.employeeCode, els.workerPosition];
@@ -82,6 +91,7 @@ async function init(): Promise<void> {
   if (!state.rules.weekStart) state.rules.weekStart = nextMonday();
   state.workers = state.workers.map((worker) => normalizeWorker(worker, state.rules));
   normalizeSchedule(state.schedule, state.rules.mealBreakHours);
+  state.scheduleHistory.forEach((entry) => normalizeSchedule(entry.schedule, state.rules.mealBreakHours));
   applyTheme(settings);
   els.darkModeToggle.checked = settings.darkMode;
   renderCloudConfig();
@@ -111,6 +121,8 @@ function bindEvents(): void {
   els.syncEmployeesBtn.addEventListener("click", () => void syncCloudEmployees());
   els.refreshSubmissionsBtn.addEventListener("click", () => void refreshSubmissions());
   els.applyAllBtn.addEventListener("click", () => void applyAllSubmissions());
+  els.saveCurrentScheduleBtn.addEventListener("click", () => void saveCurrentScheduleToHistory());
+  els.saveHistoryModificationsBtn.addEventListener("click", () => void saveHistoryModifications());
   [els.historyEmployeeFilter, els.historyWeekFilter, els.historyStatusFilter].forEach((filter) => filter.addEventListener("change", renderHistory));
   [els.weekStart, els.openShift, els.closeShift, els.shiftHours, els.mealBreakHours].forEach((input) => input.addEventListener("change", () => void rulesChanged()));
 }
@@ -135,6 +147,7 @@ function render(): void {
   els.mealBreakHours.value = String(state.rules.mealBreakHours);
   renderWorkers();
   renderSchedule();
+  renderScheduleHistory();
   ensureWorkerFormInteractive();
 }
 
@@ -151,6 +164,7 @@ async function addWorker(event: Event): Promise<void> {
       name: els.workerName.value,
       position: els.workerPosition.value,
       isManager: els.isManager.value === "true",
+      skillRating: Number(els.skillRating.value) || 5,
       noHourLimits: els.noHourLimits.checked,
       maxWeeklyHours: Number(els.maxWeeklyHours.value) || 0,
       preferredWeeklyHours: Number(els.preferredWeeklyHours.value) || 0,
@@ -189,6 +203,7 @@ function resetWorkerForm(): void {
   els.workerForm.reset();
   els.workerPosition.value = "Crew";
   els.isManager.value = "false";
+  els.skillRating.value = "5";
   els.maxWeeklyHours.value = "45";
   els.preferredWeeklyHours.value = "40";
   updateAddWorkerHourFields();
@@ -238,7 +253,7 @@ function renderWorkers(): void {
     const daySummary = DAYS.map((day, index) => '<span class="day-mini ' + (worker.availability.includes(day) ? 'on' : '') + '">' + SHORT_DAYS[index] + (worker.availability.includes(day) ? ': ' + worker.shiftAvailability[day] : '') + '</span>').join("");
     const dayEditors = DAYS.map((day) => '<label class="worker-availability-day"><span>' + day + '</span><select data-edit-shift-worker="' + worker.id + '" data-edit-shift-day="' + day + '" required><option value="Open" ' + selected(worker.shiftAvailability[day] || 'Unavailable', 'Open') + '>Available for Open</option><option value="Close" ' + selected(worker.shiftAvailability[day] || 'Unavailable', 'Close') + '>Available for Close</option><option value="Both" ' + selected(worker.shiftAvailability[day] || 'Unavailable', 'Both') + '>Available for Both</option><option value="Unavailable" ' + selected(worker.shiftAvailability[day] || 'Unavailable', 'Unavailable') + '>Not Available on ' + day + '</option></select></label>').join("");
     const hourSummary = worker.noHourLimits ? 'No hour limits' : worker.preferredWeeklyHours + ' preferred hrs | ' + worker.maxWeeklyHours + ' max hrs';
-    return '<article class="worker-card ' + (!worker.active ? 'inactive' : '') + '"><div class="worker-top"><div><h3>' + escapeHtml(worker.name) + '</h3><div class="meta">Code ' + escapeHtml(worker.employeeCode || 'Not set') + ' | ' + escapeHtml(worker.position) + (worker.isManager ? ' | Lead' : '') + ' | ' + hourSummary + '</div></div><div class="card-actions"><button class="secondary" type="button" data-toggle-active="' + worker.id + '">' + (worker.active ? 'Deactivate' : 'Activate') + '</button><button class="secondary danger" type="button" data-delete="' + worker.id + '">Delete</button></div></div><div class="tag-row">' + tags + '</div>' + (worker.notes ? '<div class="meta">Notes: ' + escapeHtml(worker.notes) + '</div>' : '') + '<div class="worker-days">' + daySummary + '</div><div class="worker-edit"><label>Employee code <input data-edit="' + worker.id + '" data-field="employeeCode" type="text" inputmode="numeric" pattern="\\d{4}" maxlength="4" value="' + escapeHtml(worker.employeeCode) + '"></label><label>Position <input data-edit="' + worker.id + '" data-field="position" type="text" value="' + escapeHtml(worker.position) + '"></label><label>Lead <select data-edit="' + worker.id + '" data-field="isManager"><option value="false" ' + selected(String(worker.isManager), 'false') + '>No</option><option value="true" ' + selected(String(worker.isManager), 'true') + '>Yes</option></select></label><label class="check-row full"><input data-edit="' + worker.id + '" data-field="noHourLimits" type="checkbox" ' + checked(worker.noHourLimits) + '> No Hour Limits</label><label>Preferred Weekly Hours <input data-edit="' + worker.id + '" data-field="preferredWeeklyHours" type="number" min="0" max="168" step="0.5" value="' + worker.preferredWeeklyHours + '" ' + disabled(worker.noHourLimits) + '></label><label>Maximum Weekly Hours <input data-edit="' + worker.id + '" data-field="maxWeeklyHours" type="number" min="0" max="168" step="0.5" value="' + worker.maxWeeklyHours + '" ' + disabled(worker.noHourLimits) + '></label><label class="check-row"><input data-edit="' + worker.id + '" data-field="canOpen" type="checkbox" ' + checked(worker.canOpen) + '> Can Open</label><label class="check-row"><input data-edit="' + worker.id + '" data-field="canClose" type="checkbox" ' + checked(worker.canClose) + '> Can Close</label><div class="full time-grid"><label>Default Open Start <input data-worker-time="' + worker.id + '" data-shift="open" data-part="start" type="time" value="' + worker.shiftTimes.open.start + '"></label><label>Default Open End <input data-worker-time="' + worker.id + '" data-shift="open" data-part="end" type="time" value="' + worker.shiftTimes.open.end + '"></label><label>Default Close Start <input data-worker-time="' + worker.id + '" data-shift="close" data-part="start" type="time" value="' + worker.shiftTimes.close.start + '"></label><label>Default Close End <input data-worker-time="' + worker.id + '" data-shift="close" data-part="end" type="time" value="' + worker.shiftTimes.close.end + '"></label></div><label class="full">Notes <textarea data-edit="' + worker.id + '" data-field="notes" rows="2">' + escapeHtml(worker.notes) + '</textarea></label><div class="full worker-days">' + dayEditors + '</div></div></article>';
+    return '<article class="worker-card ' + (!worker.active ? 'inactive' : '') + '"><div class="worker-top"><div><h3>' + escapeHtml(worker.name) + '</h3><div class="meta">Code ' + escapeHtml(worker.employeeCode || 'Not set') + ' | ' + escapeHtml(worker.position) + (worker.isManager ? ' | Lead' : '') + ' | Skill ' + worker.skillRating + '/10 | ' + hourSummary + '</div></div><div class="card-actions"><button class="secondary" type="button" data-toggle-active="' + worker.id + '">' + (worker.active ? 'Deactivate' : 'Activate') + '</button><button class="secondary danger" type="button" data-delete="' + worker.id + '">Delete</button></div></div><div class="tag-row">' + tags + '</div>' + (worker.notes ? '<div class="meta">Notes: ' + escapeHtml(worker.notes) + '</div>' : '') + '<div class="worker-days">' + daySummary + '</div><div class="worker-edit"><label>Employee code <input data-edit="' + worker.id + '" data-field="employeeCode" type="text" inputmode="numeric" pattern="\\d{4}" maxlength="4" value="' + escapeHtml(worker.employeeCode) + '"></label><label>Position <input data-edit="' + worker.id + '" data-field="position" type="text" value="' + escapeHtml(worker.position) + '"></label><label>Lead <select data-edit="' + worker.id + '" data-field="isManager"><option value="false" ' + selected(String(worker.isManager), 'false') + '>No</option><option value="true" ' + selected(String(worker.isManager), 'true') + '>Yes</option></select></label><label>Skill Rating <input data-edit="' + worker.id + '" data-field="skillRating" type="number" min="1" max="10" step="1" value="' + worker.skillRating + '"></label><label class="check-row full"><input data-edit="' + worker.id + '" data-field="noHourLimits" type="checkbox" ' + checked(worker.noHourLimits) + '> No Hour Limits</label><label>Preferred Weekly Hours <input data-edit="' + worker.id + '" data-field="preferredWeeklyHours" type="number" min="0" max="168" step="0.5" value="' + worker.preferredWeeklyHours + '" ' + disabled(worker.noHourLimits) + '></label><label>Maximum Weekly Hours <input data-edit="' + worker.id + '" data-field="maxWeeklyHours" type="number" min="0" max="168" step="0.5" value="' + worker.maxWeeklyHours + '" ' + disabled(worker.noHourLimits) + '></label><label class="check-row"><input data-edit="' + worker.id + '" data-field="canOpen" type="checkbox" ' + checked(worker.canOpen) + '> Can Open</label><label class="check-row"><input data-edit="' + worker.id + '" data-field="canClose" type="checkbox" ' + checked(worker.canClose) + '> Can Close</label><div class="full time-grid"><label>Default Open Start <input data-worker-time="' + worker.id + '" data-shift="open" data-part="start" type="time" value="' + worker.shiftTimes.open.start + '"></label><label>Default Open End <input data-worker-time="' + worker.id + '" data-shift="open" data-part="end" type="time" value="' + worker.shiftTimes.open.end + '"></label><label>Default Close Start <input data-worker-time="' + worker.id + '" data-shift="close" data-part="start" type="time" value="' + worker.shiftTimes.close.start + '"></label><label>Default Close End <input data-worker-time="' + worker.id + '" data-shift="close" data-part="end" type="time" value="' + worker.shiftTimes.close.end + '"></label></div><label class="full">Notes <textarea data-edit="' + worker.id + '" data-field="notes" rows="2">' + escapeHtml(worker.notes) + '</textarea></label><div class="full worker-days">' + dayEditors + '</div></div></article>';
   }).join("");
 
   els.workersList.querySelectorAll<HTMLButtonElement>("[data-toggle-active]").forEach((button) => button.addEventListener("click", () => void toggleWorkerActive(button.dataset.toggleActive!)));
@@ -280,6 +295,7 @@ async function editWorker(input: HTMLInputElement | HTMLSelectElement | HTMLText
       break;
     case "position": worker.position = input.value || "Crew"; worker.role = worker.isManager ? "Lead" : "Crew"; break;
     case "isManager": worker.isManager = input.value === "true"; worker.role = worker.isManager ? "Lead" : "Crew"; break;
+    case "skillRating": worker.skillRating = Math.min(10, Math.max(1, Math.round(Number(input.value) || 5))); break;
     case "noHourLimits": worker.noHourLimits = input instanceof HTMLInputElement ? input.checked : worker.noHourLimits; break;
     case "maxWeeklyHours": worker.maxWeeklyHours = Number(input.value) || 0; break;
     case "preferredWeeklyHours": worker.preferredWeeklyHours = Number(input.value) || 0; break;
@@ -332,6 +348,7 @@ async function generateAndSaveSchedule(): Promise<void> {
   try {
     syncRulesFromInputs();
     state.schedule = generateSchedule(state);
+    state.scheduleHistory.unshift(createHistoryEntry("Week of " + formatWeek(state.rules.weekStart), state.rules.weekStart, state.schedule));
     await saveStateAndRender();
     const warnings = state.schedule.days.flatMap((day) => day.warnings);
     if (warnings.length) await showDialogMessage("Schedule generated with warnings:\n\n" + warnings.slice(0, 8).join("\n") + (warnings.length > 8 ? "\n..." : ""));
@@ -412,23 +429,87 @@ async function saveEditedSchedule(): Promise<void> {
 async function printSchedule(): Promise<void> {
   if (!state.schedule) { await showDialogMessage("Generate a schedule before printing."); return; }
   try {
-    const result = await window.habanerosDesktop.printSchedule(buildPrintHtml());
+    const result = await window.habanerosDesktop.printSchedule(buildPrintHtml(state.schedule, state.rules.weekStart, "Habaneros Scheduler"));
     if (!result.success) await showDialogMessage(result.message);
   } finally {
     await restoreAfterDialog();
   }
 }
 
-function buildPrintHtml(): string {
-  const schedule = state.schedule!;
+function buildPrintHtml(schedule: NonNullable<AppState["schedule"]>, weekStart: string, title: string): string {
   const compact = schedule.days.every((day) => day.shifts.open.assigned.length <= 4 && day.shifts.close.assigned.length <= 4);
   const warnings = schedule.days.flatMap((day) => day.warnings.map((warning) => '<div class="warning"><strong>' + day.day + ':</strong> ' + escapeHtml(warning) + '</div>')).join("");
-  const css = '@page{size:landscape;margin:.25in}*{box-sizing:border-box}body{font-family:Segoe UI,Arial,sans-serif;color:#182018;margin:0;font-size:8pt;line-height:1.15}.print-header{display:flex;align-items:end;justify-content:space-between;border-bottom:1.5px solid #246b46;padding:0 0 5px;margin:0 0 5px}.print-header h1{font-size:14pt;margin:0}.week{font-weight:700;color:#4d5a4e}.week-grid{display:grid;gap:3px;align-items:start}.week-grid.compact{grid-template-columns:repeat(7,minmax(0,1fr))}.week-grid.expanded{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.day{border:1px solid #aeb9ac;break-inside:avoid;page-break-inside:avoid;min-width:0}.day-head{background:#e9f1e8;border-bottom:1px solid #aeb9ac;padding:3px 4px;font-size:8pt;font-weight:800}.day-date{display:block;color:#536154;font-size:6.8pt;font-weight:600}.shift{padding:3px 4px;break-inside:avoid;page-break-inside:avoid}.shift+.shift{border-top:1px solid #cbd3c9}.shift-head{display:flex;justify-content:space-between;gap:3px;margin-bottom:2px;font-size:7pt}.shift-time{color:#59665a;white-space:nowrap}.person{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px;border-top:1px dotted #d4dbd2;padding:2px 0;break-inside:avoid;page-break-inside:avoid;font-size:7pt}.person-name{font-weight:700;overflow-wrap:anywhere}.person-time{white-space:nowrap}.empty{color:#697369;font-style:italic;padding:2px 0}.warnings-section{border-top:1px solid #aeb9ac;margin-top:5px;padding-top:4px;break-before:auto}.warnings-title{font-size:8pt;margin:0 0 3px}.warnings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 8px}.warning{color:#7d301b;font-size:6.8pt;break-inside:avoid;page-break-inside:avoid}@media print{html,body{width:100%;height:auto}.print-header{margin-top:0}.week-grid.compact{grid-template-columns:repeat(7,minmax(0,1fr))}.day,.shift,.person,.warning{break-inside:avoid;page-break-inside:avoid}.week-grid.expanded .day{margin-bottom:0}}';
-  return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Habaneros Scheduler</title><style>' + css + '</style></head><body><header class="print-header"><h1>Habaneros Scheduler</h1><div class="week">Week of ' + escapeHtml(state.rules.weekStart) + '</div></header><main class="week-grid ' + (compact ? 'compact' : 'expanded') + '">' + schedule.days.map((day) => '<section class="day"><div class="day-head">' + day.day + '<span class="day-date">' + formatDate(day.date) + '</span></div>' + printShift(day.shifts.open, 'Opening') + printShift(day.shifts.close, 'Closing') + '</section>').join('') + '</main>' + (warnings ? '<section class="warnings-section"><h2 class="warnings-title">Schedule Warnings</h2><div class="warnings-grid">' + warnings + '</div></section>' : '') + '</body></html>';
+  const css = '@page{size:landscape;margin:.28in}*{box-sizing:border-box}body{font-family:Segoe UI,Arial,sans-serif;color:#182018;margin:0;font-size:10pt;line-height:1.18}.print-header{display:flex;align-items:end;justify-content:space-between;border-bottom:2px solid #246b46;padding:0 0 6px;margin:0 0 7px}.print-header h1{font-size:17pt;margin:0}.week{font-size:10pt;font-weight:700;color:#4d5a4e}.week-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;align-items:start}.week-grid.expanded{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.day{border:1px solid #aeb9ac;break-inside:avoid;page-break-inside:avoid;min-width:0}.day-head{background:#e9f1e8;border-bottom:1px solid #aeb9ac;padding:5px 6px;font-size:10pt;font-weight:800}.day-date{display:block;color:#536154;font-size:8pt;font-weight:600}.shift{padding:4px 6px;break-inside:avoid;page-break-inside:avoid}.shift+.shift{border-top:1px solid #cbd3c9}.shift-head{display:flex;justify-content:space-between;gap:4px;margin-bottom:3px;font-size:9pt}.shift-time{color:#59665a;white-space:nowrap}.person{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px;border-top:1px dotted #d4dbd2;padding:3px 0;break-inside:avoid;page-break-inside:avoid;font-size:8.5pt}.person-name{font-weight:700;overflow-wrap:anywhere}.person-time{white-space:nowrap}.empty{color:#697369;font-style:italic;padding:3px 0}.warnings-section{border-top:1px solid #aeb9ac;margin-top:6px;padding-top:5px;break-before:auto}.warnings-title{font-size:9pt;margin:0 0 3px}.warnings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 8px}.warning{color:#7d301b;font-size:7.5pt;break-inside:avoid;page-break-inside:avoid}@media print{html,body{width:100%;height:auto}.day,.shift,.person,.warning{break-inside:avoid;page-break-inside:avoid}}';
+  return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + escapeHtml(title) + '</title><style>' + css + '</style></head><body><header class="print-header"><h1>' + escapeHtml(title) + '</h1><div class="week">Week of ' + escapeHtml(weekStart) + '</div></header><main class="week-grid ' + (compact ? 'compact' : 'expanded') + '">' + schedule.days.map((day) => '<section class="day"><div class="day-head">' + day.day + '<span class="day-date">' + formatDate(day.date) + '</span></div>' + printShift(day.shifts.open, 'Opening') + printShift(day.shifts.close, 'Closing') + '</section>').join('') + '</main>' + (warnings ? '<section class="warnings-section"><h2 class="warnings-title">Schedule Warnings</h2><div class="warnings-grid">' + warnings + '</div></section>' : '') + '</body></html>';
 }
 
 function printShift(shift: ShiftSchedule, label: string): string {
   return '<div class="shift"><div class="shift-head"><strong>' + label + '</strong><span class="shift-time">' + formatTime(shift.time) + '</span></div>' + (shift.assigned.length ? shift.assigned.map((worker) => '<div class="person"><span class="person-name">' + escapeHtml(worker.name) + (worker.isManager ? ' (Lead)' : '') + '</span><span class="person-time">' + worker.timeRange + '</span></div>').join('') : '<div class="empty">No one assigned</div>') + '</div>';
+}
+
+function createHistoryEntry(name: string, weekStart: string, schedule: NonNullable<AppState["schedule"]>): ScheduleHistoryEntry {
+  const createdAt = new Date().toISOString();
+  return { id: crypto.randomUUID(), name: name.trim() || "Week of " + formatWeek(weekStart), weekStart, schedule: structuredClone(schedule), createdAt };
+}
+
+function renderScheduleHistory(): void {
+  els.scheduleHistoryCount.textContent = state.scheduleHistory.length + " saved";
+  els.saveCurrentScheduleBtn.disabled = !state.schedule;
+  if (!state.scheduleHistory.length) {
+    els.scheduleHistoryList.innerHTML = '<div class="empty-state">No saved schedules yet.</div>';
+    return;
+  }
+  els.scheduleHistoryList.innerHTML = state.scheduleHistory.map((entry) => '<article class="history-row"><div><strong>' + escapeHtml(entry.name) + '</strong><div class="meta">Week of ' + formatWeek(entry.weekStart) + '</div><div class="meta">Saved ' + formatSubmittedAt(entry.createdAt) + '</div></div><label>Schedule name <input data-history-name="' + entry.id + '" type="text" maxlength="160" value="' + escapeHtml(entry.name) + '"></label><div class="card-actions"><button class="secondary" data-history-action="view" data-history-id="' + entry.id + '" type="button">View</button><button class="secondary" data-history-action="print" data-history-id="' + entry.id + '" type="button">Print</button><button class="secondary" data-history-action="rename" data-history-id="' + entry.id + '" type="button">Rename</button><button class="secondary" data-history-action="modify" data-history-id="' + entry.id + '" type="button">Modify</button></div></article>').join("");
+  els.scheduleHistoryList.querySelectorAll<HTMLButtonElement>("[data-history-action]").forEach((button) => button.addEventListener("click", () => void handleScheduleHistoryAction(button)));
+}
+
+async function handleScheduleHistoryAction(button: HTMLButtonElement): Promise<void> {
+  const entry = state.scheduleHistory.find((item) => item.id === button.dataset.historyId);
+  if (!entry) return;
+  const action = button.dataset.historyAction;
+  if (action === "print") {
+    const result = await window.habanerosDesktop.printSchedule(buildPrintHtml(entry.schedule, entry.weekStart, entry.name));
+    if (!result.success) await showDialogMessage(result.message);
+    return;
+  }
+  if (action === "rename") {
+    const input = els.scheduleHistoryList.querySelector<HTMLInputElement>("[data-history-name='" + entry.id + "']");
+    if (input?.value.trim()) entry.name = input.value.trim();
+    await saveStateAndRender();
+    return;
+  }
+  state.schedule = structuredClone(entry.schedule);
+  state.rules.weekStart = entry.weekStart;
+  normalizeSchedule(state.schedule, state.rules.mealBreakHours);
+  if (action === "modify") {
+    historyEditSourceId = entry.id;
+    els.historyEditName.value = entry.name + " - Modified";
+    els.historyEditWeek.value = entry.weekStart;
+    els.scheduleHistoryEditor.hidden = false;
+  } else {
+    historyEditSourceId = null;
+    els.scheduleHistoryEditor.hidden = true;
+  }
+  render();
+}
+
+async function saveCurrentScheduleToHistory(): Promise<void> {
+  if (!state.schedule) return;
+  state.scheduleHistory.unshift(createHistoryEntry("Week of " + formatWeek(state.rules.weekStart), state.rules.weekStart, state.schedule));
+  await saveStateAndRender();
+}
+
+async function saveHistoryModifications(): Promise<void> {
+  if (!historyEditSourceId || !state.schedule) return;
+  const source = state.scheduleHistory.find((entry) => entry.id === historyEditSourceId);
+  if (!source) return;
+  const weekStart = els.historyEditWeek.value || source.weekStart;
+  const schedule = structuredClone(state.schedule);
+  schedule.days.forEach((day, index) => { day.date = addDays(weekStart, index); });
+  state.scheduleHistory.unshift(createHistoryEntry(els.historyEditName.value || source.name + " - Modified", weekStart, schedule));
+  historyEditSourceId = null;
+  els.scheduleHistoryEditor.hidden = true;
+  await saveStateAndRender();
 }
 
 async function exportData(format: ExportFormat): Promise<void> {
@@ -472,6 +553,10 @@ function importJson(content: string): ImportResult {
     state.schedule = importedState.schedule;
     normalizeSchedule(state.schedule, state.rules.mealBreakHours);
   }
+  if (Array.isArray(importedState.scheduleHistory)) {
+    const existingIds = new Set(state.scheduleHistory.map((entry) => entry.id));
+    state.scheduleHistory.push(...importedState.scheduleHistory.filter((entry) => !existingIds.has(entry.id)));
+  }
   return { imported, skipped, messages: skipped ? [String(skipped) + " duplicate employee(s) skipped."] : [] };
 }
 
@@ -486,7 +571,7 @@ function importCsv(content: string): ImportResult {
     const name = get("name") || get("employee name");
     if (!name.trim()) { skipped++; continue; }
     const isLead = yes(get("lead")) || yes(get("manager"));
-    const worker = normalizeWorker({ id: crypto.randomUUID(), employeeCode: get("employee code"), name, position: get("position") || "Crew", role: isLead ? "Lead" : "Crew", isManager: isLead, noHourLimits: yes(get("no hour limits")), maxWeeklyHours: Number(get("max weekly hours")) || 45, preferredWeeklyHours: Number(get("preferred weekly hours")) || 40, maxDays: 7, canOpen: yes(get("can open")), canClose: yes(get("can close")), active: !no(get("active")), notes: get("notes"), availability: splitDays(get("available days")), shiftAvailability: splitShiftAvailability(get("shift availability")), shiftTimes: { open: { start: get("default open start"), end: get("default open end") }, close: { start: get("default close start"), end: get("default close end") } } }, state.rules);
+    const worker = normalizeWorker({ id: crypto.randomUUID(), employeeCode: get("employee code"), name, position: get("position") || "Crew", role: isLead ? "Lead" : "Crew", isManager: isLead, skillRating: Number(get("skill rating")) || 5, noHourLimits: yes(get("no hour limits")), maxWeeklyHours: Number(get("max weekly hours")) || 45, preferredWeeklyHours: Number(get("preferred weekly hours")) || 40, maxDays: 7, canOpen: yes(get("can open")), canClose: yes(get("can close")), active: !no(get("active")), notes: get("notes"), availability: splitDays(get("available days")), shiftAvailability: splitShiftAvailability(get("shift availability")), shiftTimes: { open: { start: get("default open start"), end: get("default open end") }, close: { start: get("default close start"), end: get("default close end") } } }, state.rules);
     if (mergeWorker(worker)) imported++; else skipped++;
   }
   return { imported, skipped, messages: skipped ? [String(skipped) + " duplicate or invalid row(s) skipped."] : [] };
@@ -687,7 +772,11 @@ function formatWeek(value: string): string {
 }
 
 async function clearData(): Promise<void> {
-  if (!await confirmDialog("Clear the current generated schedule? Employee profiles and settings will not be affected.")) return;
+  if (!await confirmDialog("Are you sure you want to reset all employee availability to Not Available? Employee profiles will be kept.")) return;
+  state.workers.forEach((worker) => {
+    worker.availability = [];
+    worker.shiftAvailability = DAYS.reduce((result, day) => ({ ...result, [day]: "Unavailable" as ShiftAvailability }), {} as ShiftAvailabilityMap);
+  });
   state.schedule = null;
   await saveStateAndRender();
 }

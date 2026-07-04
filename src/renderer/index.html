@@ -29,6 +29,7 @@
           <label>4-digit employee code <input id="employeeCode" type="text" inputmode="numeric" pattern="\d{4}" maxlength="4" autocomplete="off" placeholder="1234" required></label>
           <label>Position <input id="workerPosition" type="text" autocomplete="off" placeholder="Cook, Cashier, Server" value="Crew"></label>
           <label>Lead <select id="isManager"><option value="false">No</option><option value="true">Yes</option></select></label>
+          <label>Skill Rating <input id="skillRating" type="number" min="1" max="10" step="1" value="5" required></label>
         </div>
         <fieldset class="hours-section"><legend>Weekly Hours</legend>
           <label class="check-row hour-limit-toggle"><input id="noHourLimits" type="checkbox"> No Hour Limits</label>
@@ -76,6 +77,7 @@
     </section>
     <section class="panel wide"><div class="section-head with-action"><div><h2>Workers</h2><p>Edit permanent employee details, availability, qualifications, and status.</p></div><span id="workerCount" class="count-pill">0 workers</span></div><div id="workersList" class="workers-list"></div></section>
     <section class="panel wide"><div class="section-head with-action"><div><h2>Generated Schedule</h2><p>Edit employees, days, shifts, and times directly in the weekly schedule.</p></div><span id="scheduleStatus" class="count-pill">Not generated</span></div><div id="scheduleOutput" class="schedule-output"></div></section>
+    <section class="panel wide"><div class="section-head with-action"><div><h2>Schedule History</h2><p>View, print, rename, or modify saved schedule snapshots.</p></div><div class="actions-row"><span id="scheduleHistoryCount" class="count-pill">0 saved</span><button id="saveCurrentScheduleBtn" class="secondary" type="button">Save Current Schedule</button></div></div><div id="scheduleHistoryList" class="history-list"></div><div id="scheduleHistoryEditor" class="history-editor" hidden><label>New schedule name <input id="historyEditName" type="text" maxlength="160"></label><label>Week of <input id="historyEditWeek" type="date"></label><button id="saveHistoryModificationsBtn" class="primary" type="button">Save Schedule Modifications</button></div></section>
   </main>
   <script src="app.js"></script>
 </body>

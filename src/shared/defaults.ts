@@ -20,7 +20,7 @@ export function defaultSettings(): AppSettings {
 }
 
 export function defaultAppState(): AppState {
-  return { workers: [], rules: defaultRules(), schedule: null };
+  return { workers: [], rules: defaultRules(), schedule: null, scheduleHistory: [] };
 }
 
 export function defaultWorkerShiftTimes(rules: ScheduleRules): WorkerShiftTimes {
@@ -59,6 +59,7 @@ export function normalizeWorker(worker: Partial<Worker> & { id: string; name: st
     position,
     role,
     isManager: role === "Lead" || isManager,
+    skillRating: Math.min(10, Math.max(1, Number(worker.skillRating) || 5)),
     noHourLimits: Boolean(worker.noHourLimits),
     maxWeeklyHours,
     preferredWeeklyHours: Number(worker.preferredWeeklyHours || Math.min(maxWeeklyHours, 32)),

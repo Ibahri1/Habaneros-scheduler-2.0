@@ -1,6 +1,6 @@
 {
   "name": "habaneros-scheduler",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Windows desktop staff scheduling application for Habaneros Mexican Grill.",
   "author": "Habaneros Mexican Grill",
   "private": true,

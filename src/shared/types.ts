@@ -19,6 +19,7 @@ export interface Worker {
   position: string;
   role: WorkerRole;
   isManager: boolean;
+  skillRating: number;
   noHourLimits: boolean;
   maxWeeklyHours: number;
   preferredWeeklyHours: number;
@@ -73,7 +74,8 @@ export interface DaySchedule {
 }
 
 export interface GeneratedSchedule { createdAt: string; days: DaySchedule[]; }
-export interface AppState { workers: Worker[]; rules: ScheduleRules; schedule: GeneratedSchedule | null; }
+export interface ScheduleHistoryEntry { id: string; name: string; weekStart: string; schedule: GeneratedSchedule; createdAt: string; }
+export interface AppState { workers: Worker[]; rules: ScheduleRules; schedule: GeneratedSchedule | null; scheduleHistory: ScheduleHistoryEntry[]; }
 export interface AppSettings { darkMode: boolean; confirmBeforeClose: boolean; }
 export interface CloudConfig { supabaseUrl: string; anonKey: string; }
 export interface AvailabilitySubmission {

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.8.0 - 2026-07-03
+
+- Changed schedule generation to cover every feasible shift with one Lead before assigning any extra Leads.
+- Added persisted employee Skill Rating from 1-10 with a legacy default of 5 and balanced strong/learning employee distribution.
+- Changed Clear to reset all employee availability to Not Available while preserving profiles, settings, and schedule history.
+- Increased print readability with a four-column, two-row weekly layout for typical schedules of up to four workers per shift.
+- Added persisted Schedule History snapshots with view, print, inline rename, modify, week-date editing, and save-as-new modification workflows.
+- Added Skill Rating and Schedule History to JSON persistence and Skill Rating to CSV import/export.
+
 ## 1.7.0 - 2026-07-02
 
 - Replaced phone and desktop availability checkboxes with seven required daily availability selectors.
