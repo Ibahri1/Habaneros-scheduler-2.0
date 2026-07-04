@@ -78,13 +78,7 @@ export function generateSchedule(state: AppState): GeneratedSchedule {
   });
 
   contexts.forEach((context) => {
-    const capability = context.shiftName === "open" ? "canOpen" : "canClose";
     if (context.needed > 0 && !context.assigned.some((worker) => worker.isManager)) context.warnings.push("Missing lead for " + context.day + " " + context.shiftName + ".");
-    if (context.assigned.length < context.needed && !context.assigned.some((worker) => worker[capability])) {
-      const qualified = rankWorkers(state.workers.filter((worker) => worker[capability] && canWork(worker, context, stats)), stats, context.assigned)[0];
-      if (qualified) assign(qualified, context, stats);
-      else context.warnings.push("No qualified " + context.shiftName + " employee available for " + context.day + ".");
-    }
     while (context.assigned.length < context.needed) {
       const next = rankWorkers(state.workers.filter((worker) => canWork(worker, context, stats)), stats, context.assigned)[0];
       if (!next) break;
@@ -97,8 +91,8 @@ export function generateSchedule(state: AppState): GeneratedSchedule {
     const shifts = {} as Record<ShiftName, ShiftSchedule>;
     (["open", "close"] as ShiftName[]).forEach((shiftName) => {
       const context = contexts.find((item) => item.day === day && item.shiftName === shiftName)!;
-      const capability = shiftName === "open" ? "canOpen" : "canClose";
-      shifts[shiftName] = { name: shiftName, needed: context.needed, time: shiftName === "open" ? state.rules.openShift : state.rules.closeShift, assigned: context.assigned.map((worker) => toAssignedWorker(worker, shiftName, state.rules.mealBreakHours)), hasQualified: context.assigned.some((worker) => worker[capability]), hasManager: context.assigned.some((worker) => worker.isManager) };
+      const hasLead = context.assigned.some((worker) => worker.isManager);
+      shifts[shiftName] = { name: shiftName, needed: context.needed, time: shiftName === "open" ? state.rules.openShift : state.rules.closeShift, assigned: context.assigned.map((worker) => toAssignedWorker(worker, shiftName, state.rules.mealBreakHours)), hasQualified: hasLead, hasManager: hasLead };
     });
     return { day, date: addDays(state.rules.weekStart, index), shifts, warnings: warningsByDay.get(day)! };
   });

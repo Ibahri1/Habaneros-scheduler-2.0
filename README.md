@@ -195,7 +195,7 @@ Add business logic in a module folder, expose persistence through `src/main/data
 
 ## Employee And Schedule Data
 
-Employee profiles store permanent information: identity, employee code, position, lead status, skill rating, seven-day Open/Close/Both/Unavailable choices, qualifications, hour preferences, default open/close shift templates, active status, and notes.
+Employee profiles store permanent information: identity, employee code, position, Lead status, skill rating, seven-day Open/Close/Both/Unavailable choices, hour preferences, default open/close shift templates, active status, and notes. Leads are qualified to satisfy both opening and closing Lead requirements.
 
 Employee default shift times are copied into newly generated assignments. After generating a schedule, use the inline controls to change the employee, day, shift, start time, or end time. These edits save immediately and never update employee profile templates or generate a new schedule. Printed schedules use the saved edited assignments.
 
@@ -211,7 +211,7 @@ After running `npm run dev`, verify these workflows:
 
 1. Dark Mode: toggle Dark Mode in the header, close the app, reopen it, and confirm the theme is restored.
 2. Availability: choose Open, Close, Both, or Not Available for all seven days, reopen the app, and confirm the choices persist.
-3. Add Worker: enter name, position, lead status, opening/closing permissions, max/preferred hours, notes, seven-day availability, and default open/close times.
+3. Add Worker: enter name, position, Lead status, max/preferred hours, notes, seven-day availability, and default open/close times.
 4. Edit Worker: change position, lead status, hours, permissions, notes, availability, and default shift templates. Confirm changes persist after restart without altering an existing generated schedule.
 5. Deactivate Worker: click Deactivate and confirm the worker remains visible but is not scheduled. Click Activate to restore.
 6. Delete Worker: delete a worker and confirm it is removed after restart.

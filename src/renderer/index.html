@@ -11,7 +11,7 @@
 </head>
 <body>
   <header class="app-header">
-    <div><p class="eyebrow">Habaneros</p><h1>Staff Scheduler</h1></div>
+    <div class="app-brand"><div class="brand-logo-frame"><img class="brand-logo" src="assets/habaneros-logo.png" alt="Habaneros Mexican Food"></div><p>Staff Scheduling Database</p></div>
     <div class="header-actions">
       <label class="theme-toggle"><input id="darkModeToggle" type="checkbox"> Dark Mode</label>
       <button id="importBtn" class="secondary" type="button">Import</button>
@@ -38,10 +38,7 @@
             <label>Maximum Weekly Hours <input id="maxWeeklyHours" type="number" min="0" max="168" step="0.5" value="45"></label>
           </div>
         </fieldset>
-        <fieldset><legend>Qualified for</legend>
-          <label class="check-row"><input id="canOpen" type="checkbox"> Opening</label>
-          <label class="check-row"><input id="canClose" type="checkbox"> Closing</label>
-        </fieldset>
+        <p class="meta">Leads are qualified to open and close.</p>
         <fieldset><legend>Availability</legend><div id="availabilityChecks" class="day-checks"></div></fieldset>
         <fieldset><legend>Default employee shift times</legend><div class="time-grid"><label>Default Open Start <input id="workerOpenStart" type="time" required></label><label>Default Open End <input id="workerOpenEnd" type="time" required></label><label>Default Close Start <input id="workerCloseStart" type="time" required></label><label>Default Close End <input id="workerCloseEnd" type="time" required></label></div></fieldset>
         <label>Notes <textarea id="workerNotes" rows="3" placeholder="Optional notes"></textarea></label>
@@ -75,7 +72,7 @@
       </div>
       <div id="historyList" class="history-list"><div class="empty-state">Refresh submissions to load history.</div></div>
     </section>
-    <section class="panel wide"><div class="section-head with-action"><div><h2>Workers</h2><p>Edit permanent employee details, availability, qualifications, and status.</p></div><span id="workerCount" class="count-pill">0 workers</span></div><div id="workersList" class="workers-list"></div></section>
+    <section class="panel wide"><div class="section-head with-action"><div><h2>Workers</h2><p>Edit permanent employee details, availability, Lead status, and active status.</p></div><span id="workerCount" class="count-pill">0 workers</span></div><div id="workersList" class="workers-list"></div></section>
     <section class="panel wide"><div class="section-head with-action"><div><h2>Generated Schedule</h2><p>Edit employees, days, shifts, and times directly in the weekly schedule.</p></div><span id="scheduleStatus" class="count-pill">Not generated</span></div><div id="scheduleOutput" class="schedule-output"></div></section>
     <section class="panel wide"><div class="section-head with-action"><div><h2>Schedule History</h2><p>View, print, rename, or modify saved schedule snapshots.</p></div><div class="actions-row"><span id="scheduleHistoryCount" class="count-pill">0 saved</span><button id="saveCurrentScheduleBtn" class="secondary" type="button">Save Current Schedule</button></div></div><div id="scheduleHistoryList" class="history-list"></div><div id="scheduleHistoryEditor" class="history-editor" hidden><label>New schedule name <input id="historyEditName" type="text" maxlength="160"></label><label>Week of <input id="historyEditWeek" type="date"></label><button id="saveHistoryModificationsBtn" class="primary" type="button">Save Schedule Modifications</button></div></section>
   </main>

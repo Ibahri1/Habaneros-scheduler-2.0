@@ -64,8 +64,6 @@ export function normalizeWorker(worker: Partial<Worker> & { id: string; name: st
     maxWeeklyHours,
     preferredWeeklyHours: Number(worker.preferredWeeklyHours || Math.min(maxWeeklyHours, 32)),
     maxDays: Number(worker.maxDays || 7),
-    canOpen: Boolean(worker.canOpen),
-    canClose: Boolean(worker.canClose),
     active: worker.active !== false,
     notes: String(worker.notes || ""),
     availability,

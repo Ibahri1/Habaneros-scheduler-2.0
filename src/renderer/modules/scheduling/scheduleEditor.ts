@@ -65,16 +65,14 @@ export function replaceAssignedEmployee(assignment: AssignedWorker, worker: Work
   assignment.isManager = worker.isManager;
 }
 
-export function refreshScheduleCoverage(schedule: GeneratedSchedule, workers: Worker[]): void {
+export function refreshScheduleCoverage(schedule: GeneratedSchedule): void {
   schedule.days.forEach((day) => {
     const warnings: string[] = [];
     (["open", "close"] as ShiftName[]).forEach((shiftName) => {
       const shift = day.shifts[shiftName];
-      const capability = shiftName === "open" ? "canOpen" : "canClose";
       shift.hasManager = shift.assigned.some((assignment) => assignment.isManager);
-      shift.hasQualified = shift.assigned.some((assignment) => workers.find((worker) => worker.id === assignment.id)?.[capability]);
+      shift.hasQualified = shift.hasManager;
       if (shift.needed > 0 && !shift.hasManager) warnings.push("Missing lead for " + day.day + " " + shiftName + ".");
-      if (shift.needed > 0 && !shift.hasQualified) warnings.push("No qualified " + shiftName + " employee assigned for " + day.day + ".");
       if (shift.assigned.length < shift.needed) warnings.push("Unfilled " + shiftName + " shift on " + day.day + ": " + shift.assigned.length + " of " + shift.needed + " filled.");
     });
     day.warnings = warnings;

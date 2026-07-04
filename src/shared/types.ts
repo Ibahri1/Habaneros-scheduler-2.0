@@ -24,8 +24,6 @@ export interface Worker {
   maxWeeklyHours: number;
   preferredWeeklyHours: number;
   maxDays: number;
-  canOpen: boolean;
-  canClose: boolean;
   active: boolean;
   notes: string;
   availability: DayName[];

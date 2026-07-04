@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.8.1 - 2026-07-03
+
+- Removed separate employee Open and Close qualification controls and stored fields.
+- Made Lead status the sole qualification for satisfying opening and closing Lead requirements.
+- Updated CSV import/export and legacy JSON normalization to safely ignore obsolete qualification fields.
+- Preserved availability-specific Open, Close, Both, and Unavailable scheduling behavior.
+
 ## 1.8.0 - 2026-07-03
 
 - Changed schedule generation to cover every feasible shift with one Lead before assigning any extra Leads.
