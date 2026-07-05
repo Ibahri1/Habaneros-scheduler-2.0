@@ -23,6 +23,26 @@ npm install
 npm run dev
 ```
 
+The desktop app opens to the manager login screen. Enter the local manager password `92118`. Login lasts for the current app session only.
+
+## Local Browser Version
+
+Build and start the manager app in a normal browser with:
+
+```bash
+npm run web:dev
+```
+
+Open `http://127.0.0.1:4173` and enter password `92118`. The browser session remains unlocked until that browser tab/session is closed. To create the browser files without starting the local server, run:
+
+```bash
+npm run web:build
+```
+
+The browser version reuses the desktop renderer and scheduling modules. Its data is stored separately in that browser's local storage, so it does not automatically share the desktop app's JSON file. JSON import/export can be used to move data between them. Browser printing uses the browser print dialog, and browser import/export uses file upload and download instead of Windows file dialogs. Supabase configuration is also stored separately per browser.
+
+The password is intentionally a simple local access screen, not secure online authentication. Because browser code is delivered to the browser, it must not be treated as protection for an internet-hosted manager app. No Supabase service-role key is used or exposed.
+
 ## Build
 
 ```bash
@@ -52,9 +72,11 @@ This runs `npm install` and `npm run dist`, then places the installer and portab
 - `src/main` - Electron main process, windows, IPC, local data storage, app settings.
 - `src/preload` - Secure bridge between Electron and the renderer.
 - `src/renderer` - User interface and renderer-side modules.
+- `src/renderer/browserBridge.ts` - Browser-safe storage, dialogs, printing, import/export, and public Supabase adapter.
 - `src/shared` - Shared types, validation, defaults, and time helpers.
 - `src/main/database` - Storage boundary. Currently JSON file storage; replace this layer later for SQLite.
 - `build` - Windows icon and build resources.
+- `scripts/serve-web.mjs` - Local-only static server for the browser manager app.
 
 ## Data Location
 

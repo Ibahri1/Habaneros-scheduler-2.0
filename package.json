@@ -1,6 +1,6 @@
 {
   "name": "habaneros-scheduler",
-  "version": "1.8.1",
+  "version": "1.9.0",
   "description": "Windows desktop staff scheduling application for Habaneros Mexican Grill.",
   "author": "Habaneros Mexican Grill",
   "private": true,
@@ -13,6 +13,8 @@
     "electron": "wait-on dist/main/main.js dist/preload/preload.js dist/renderer/app.js dist/renderer/index.html dist/renderer/styles/app.css && electron .",
     "build": "node scripts/clean.mjs && tsc && node scripts/build-renderer.mjs && node scripts/copy-assets.mjs",
     "dist": "npm run build && electron-builder --win nsis portable",
+    "web:build": "npm run build",
+    "web:dev": "npm run web:build && node scripts/serve-web.mjs",
     "lint": "tsc --noEmit",
     "watch-assets": "node scripts/watch-assets.mjs"
   },

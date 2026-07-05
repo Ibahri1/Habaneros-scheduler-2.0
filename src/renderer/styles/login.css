@@ -1,0 +1,33 @@
+.login-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg);
+}
+
+.login-screen[hidden] { display: none; }
+
+.login-card {
+  width: min(400px, 100%);
+  display: grid;
+  gap: 16px;
+  padding: 28px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 16px 40px rgba(20, 30, 20, .14);
+}
+
+.login-logo {
+  display: block;
+  width: min(250px, 100%);
+  height: auto;
+  margin: 0 auto;
+}
+
+.login-card h1 { text-align: center; font-size: 1.35rem; }
+.login-error { min-height: 1.25rem; margin: 0; color: var(--bad); font-weight: 700; }
+.login-locked > .app-header, .login-locked > .layout { visibility: hidden; }
