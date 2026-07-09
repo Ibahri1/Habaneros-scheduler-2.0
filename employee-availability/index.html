@@ -9,31 +9,39 @@
 </head>
 <body>
   <main>
-    <header><p>Habaneros Mexican Grill</p><h1>Weekly Availability</h1></header>
+    <header>
+      <p>Habaneros Mexican Grill</p>
+      <div class="language-toggle" aria-label="Language">
+        <button id="languageEnglish" type="button" data-language="en">English</button>
+        <button id="languageSpanish" type="button" data-language="es">Español</button>
+      </div>
+      <h1 data-i18n="title">Employee Availability</h1>
+    </header>
     <section id="loginPanel">
       <form id="codeForm">
-        <label for="employeeCode">4-digit employee code</label>
+        <label for="employeeCode" data-i18n="employeeCode">Employee Code</label>
         <input id="employeeCode" type="password" inputmode="numeric" pattern="\d{4}" maxlength="4" autocomplete="one-time-code" required>
-        <button type="submit">Continue</button>
+        <p class="hint" data-i18n="employeeCodeHint">Enter your 4-digit employee code</p>
+        <button type="submit" data-i18n="continue">Continue</button>
       </form>
     </section>
     <section id="availabilityPanel" hidden>
-      <div class="welcome">Welcome, <strong id="employeeName"></strong></div>
+      <div class="welcome"><span data-i18n="welcome">Welcome</span>, <strong id="employeeName"></strong></div>
       <form id="availabilityForm">
-        <label for="weekStart">Week</label>
+        <label for="weekStart" data-i18n="weekOf">Week of</label>
         <select id="weekStart" required></select>
-        <fieldset><legend>Days you are available</legend><div id="days" class="days"></div></fieldset>
-        <button type="submit">Submit Availability</button>
-        <button id="startOver" class="secondary" type="button">Use a different code</button>
+        <fieldset><legend data-i18n="daysAvailable">Days you are available</legend><div id="days" class="days"></div></fieldset>
+        <button type="submit" data-i18n="submitAvailability">Submit Availability</button>
+        <button id="startOver" class="secondary" type="button" data-i18n="useDifferentCode">Use a different code</button>
       </form>
     </section>
     <section id="successPanel" class="success-panel" hidden>
       <div class="success-check" aria-hidden="true">&#10003;</div>
-      <h2>Availability Submitted Successfully</h2>
-      <p>Your lead has received your availability for:</p>
+      <h2 data-i18n="successTitle">Availability Submitted Successfully</h2>
+      <p data-i18n="successReceived">Your lead has received your availability for:</p>
       <strong id="successWeek"></strong>
-      <p>Thank you.</p>
-      <button id="submitAnother" type="button">Submit Another Week</button>
+      <p data-i18n="thankYou">Thank you.</p>
+      <button id="submitAnother" type="button" data-i18n="submitAnother">Submit Another Week</button>
     </section>
     <div id="message" role="status" aria-live="polite"></div>
   </main>

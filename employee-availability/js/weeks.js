@@ -13,10 +13,10 @@ export function toIsoDate(date) {
   return date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0");
 }
 
-export function formatDate(date) {
-  return date.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
+export function formatDate(date, locale) {
+  return date.toLocaleDateString(locale, { month: "long", day: "numeric", year: "numeric" });
 }
 
-export function formatWeek(value) {
-  return formatDate(new Date(value + "T12:00:00"));
+export function formatWeek(value, locale) {
+  return formatDate(new Date(value + "T12:00:00"), locale);
 }

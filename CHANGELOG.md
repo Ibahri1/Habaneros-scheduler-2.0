@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.9.1 - 2026-07-08
+
+- Added an English/Español language toggle to the employee availability phone form.
+- Translated the phone form labels, buttons, day names, dropdown choices, success text, and common validation messages without changing submitted Supabase values.
+- Remembered the selected phone-form language in browser local storage.
+
+## 1.9.0 - 2026-07-04
+
+- Added a session-only manager login screen to both Electron and browser versions using the requested local password.
+- Added a browser-compatible manager app that reuses the existing renderer, scheduler, employee, and schedule-history modules.
+- Added browser-local persistence plus browser-safe printing, import/export, dialogs, and existing public-key Supabase RPC support.
+- Added `npm run web:dev` and `npm run web:build` commands without changing desktop storage or Electron security settings.
+
 ## 1.8.1 - 2026-07-03
 
 - Removed separate employee Open and Close qualification controls and stored fields.
