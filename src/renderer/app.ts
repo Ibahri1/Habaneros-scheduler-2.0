@@ -1,4 +1,3 @@
-import "./browserBridge";
 import { defaultAppState, defaultWorkerShiftTimes, normalizeWorker } from "../shared/defaults";
 import { DAYS, SHORT_DAYS, AvailabilitySubmission, CloudConfig, DayName, AppSettings, AppState, ExportFormat, ImportResult, ScheduleHistoryEntry, ShiftAvailability, ShiftAvailabilityMap, ShiftName, ShiftSchedule, SubmissionStatus, Worker, WorkerRole } from "../shared/types";
 import { addDays, formatDate, formatDuration, formatTime, nextMonday } from "../shared/time";
@@ -9,7 +8,6 @@ import { duplicateAssignment, findAssignment, moveAssignment, normalizeSchedule,
 import { countScheduleWarnings } from "./modules/reports/reports";
 import { applyTheme } from "./modules/settings/settings";
 import { byId, escapeHtml } from "./shared/dom";
-import { requireManagerLogin } from "./modules/auth/login";
 
 let state: AppState = defaultAppState();
 let settings: AppSettings = { darkMode: false, confirmBeforeClose: true };
@@ -18,10 +16,6 @@ let submissions: AvailabilitySubmission[] = [];
 let historyEditSourceId: string | null = null;
 
 const els = {
-  loginScreen: byId<HTMLElement>("loginScreen"),
-  loginForm: byId<HTMLFormElement>("loginForm"),
-  loginPassword: byId<HTMLInputElement>("loginPassword"),
-  loginError: byId<HTMLElement>("loginError"),
   availabilityChecks: byId<HTMLDivElement>("availabilityChecks"),
   workerForm: byId<HTMLFormElement>("workerForm"),
   workerName: byId<HTMLInputElement>("workerName"),
@@ -80,7 +74,7 @@ const els = {
 
 const workerIdentityFields = [els.workerName, els.employeeCode, els.workerPosition];
 
-requireManagerLogin({ screen: els.loginScreen, form: els.loginForm, password: els.loginPassword, error: els.loginError }, () => void init());
+void init();
 
 async function init(): Promise<void> {
   try {

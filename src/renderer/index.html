@@ -3,23 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>Habaneros Scheduler</title>
   <link rel="stylesheet" href="styles/app.css">
-  <link rel="stylesheet" href="styles/login.css">
   <link rel="stylesheet" href="styles/cloud.css">
   <link rel="stylesheet" href="styles/schedule-editor.css">
 </head>
-<body class="login-locked">
-  <section id="loginScreen" class="login-screen" aria-labelledby="loginTitle">
-    <form id="loginForm" class="login-card">
-      <img class="login-logo" src="assets/habaneros-logo.png" alt="Habaneros Mexican Food">
-      <h1 id="loginTitle">Staff Scheduling Database</h1>
-      <label>Password <input id="loginPassword" type="password" autocomplete="current-password" required></label>
-      <p id="loginError" class="login-error" role="alert" aria-live="polite"></p>
-      <button class="primary" type="submit">Log In</button>
-    </form>
-  </section>
+<body>
   <header class="app-header">
     <div class="app-brand"><div class="brand-logo-frame"><img class="brand-logo" src="assets/habaneros-logo.png" alt="Habaneros Mexican Food"></div><p>Staff Scheduling Database</p></div>
     <div class="header-actions">
