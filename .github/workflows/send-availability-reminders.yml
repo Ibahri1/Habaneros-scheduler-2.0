@@ -2,7 +2,7 @@ name: Send Availability Reminders
 
 on:
   schedule:
-    - cron: "*/2 * * * *"
+    - cron: "*/6 * * * *"
   workflow_dispatch:
 
 jobs:
