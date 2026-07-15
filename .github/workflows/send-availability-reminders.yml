@@ -1,0 +1,20 @@
+name: Send Availability Reminders
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  send-availability-reminders:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call Supabase Edge Function
+        run: |
+          curl --fail --show-error --silent \
+            --request POST \
+            --url "https://zwrgrgzixfrlipvdydtq.supabase.co/functions/v1/send-availability-reminders" \
+            --header "Authorization: Bearer ${{ secrets.SUPABASE_FUNCTION_ANON_KEY }}" \
+            --header "apikey: ${{ secrets.SUPABASE_FUNCTION_ANON_KEY }}" \
+            --header "Content-Type: application/json" \
+            --data '{ "mode": "send" }'
