@@ -23,7 +23,7 @@ const DAY_INDEX: Record<DayName, number> = {
 export function normalizeSettings(settings: Partial<AppSettings> | null | undefined): AppSettings {
   const defaults = defaultSettings();
   const deadline = { ...defaults.availabilityDeadline, ...(settings?.availabilityDeadline || {}) };
-  deadline.smsRemindersEnabled = deadline.smsRemindersEnabled !== false;
+  deadline.smsRemindersEnabled = deadline.smsRemindersEnabled === true;
   if (!DAYS.includes(deadline.deadlineDay)) deadline.deadlineDay = defaults.availabilityDeadline.deadlineDay;
   deadline.deadlineTime = normalizeTime(deadline.deadlineTime, defaults.availabilityDeadline.deadlineTime);
   deadline.firstReminderTime = normalizeTime(deadline.firstReminderTime, defaults.availabilityDeadline.firstReminderTime);

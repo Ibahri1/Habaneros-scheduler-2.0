@@ -10,5 +10,17 @@ const files = [
 ];
 for (const [from, to] of files) {
   await fs.mkdir(path.dirname(to), { recursive: true });
-  await fs.copyFile(from, to);
+  await copyWithRetry(from, to);
+}
+
+async function copyWithRetry(from, to, attempts = 8) {
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      await fs.copyFile(from, to);
+      return;
+    } catch (error) {
+      if (!['EBUSY', 'EPERM', 'EACCES'].includes(error?.code) || attempt === attempts) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 150 * attempt));
+    }
+  }
 }

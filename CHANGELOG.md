@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.10.11 - 2026-07-16
+
+- Changed SMS reminders to default to disabled for fresh installs and missing settings.
+- Preserved explicit saved SMS reminder choices so saved `true` remains enabled and saved `false` remains disabled.
+- Updated the Supabase reminder Edge Function default so scheduled runs do not send texts unless SMS reminders have been explicitly enabled.
+
+## 1.10.10 - 2026-07-16
+
+- Added Add Employee trace logging around local state updates, selected employee state, visible employee counts, and Supabase sync results.
+- Removed the compact employee list's 10-person display cap so newly added workers cannot appear missing when the selector is not open.
+- Strengthened the Add Employee visibility path so search/filter state is cleared only when it would hide the newly added worker.
+- Added retry handling to the dev asset copy step to avoid transient Windows file-lock failures while Electron is running.
+
+## 1.10.9 - 2026-07-16
+
+- Fixed the Employees page so newly added workers appear immediately in the employee selector and open automatically after saving locally.
+- Prevented active search/filter settings from hiding a newly added employee by clearing only the search/filter state that would exclude the new worker.
+- Kept locally added employees visible even when the follow-up Supabase sync fails.
+
+## 1.10.8 - 2026-07-16
+
+- Improved dark mode contrast across dashboard cards, navigation, panels, forms, buttons, tags, toasts, and modals.
+- Fixed dark mode readability for generated schedules, Schedule Rules, assignment editors, warnings, missing worker rows, and schedule status badges.
+- Improved dark mode styling for Employees, Availability, Settings, and History pages so tables, forms, selectors, and status indicators remain readable.
+
 ## 1.10.7 - 2026-07-15
 
 - Updated Save Employee Availability to show the exact saved confirmation after a successful save, then return to the employee selector/list view.

@@ -20,7 +20,7 @@ export function defaultSettings(): AppSettings {
     darkMode: false,
     confirmBeforeClose: true,
     availabilityDeadline: {
-      smsRemindersEnabled: true,
+      smsRemindersEnabled: false,
       deadlineDay: "Tuesday",
       deadlineTime: "23:59",
       firstReminderTime: "12:00",

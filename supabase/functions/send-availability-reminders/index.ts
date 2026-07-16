@@ -22,7 +22,7 @@ interface AvailabilityDeadlineSettings {
 }
 
 const DEFAULT_SETTINGS: AvailabilityDeadlineSettings = {
-  smsRemindersEnabled: true,
+  smsRemindersEnabled: false,
   deadlineDay: "Tuesday",
   deadlineTime: "23:59",
   firstReminderTime: "12:00",
@@ -105,7 +105,7 @@ async function loadDeadlineSettings(): Promise<AvailabilityDeadlineSettings> {
 
 function normalizeSettings(input: Partial<AvailabilityDeadlineSettings>): AvailabilityDeadlineSettings {
   const settings = { ...DEFAULT_SETTINGS, ...input };
-  settings.smsRemindersEnabled = settings.smsRemindersEnabled !== false;
+  settings.smsRemindersEnabled = settings.smsRemindersEnabled === true;
   if (!DAYS.includes(settings.deadlineDay)) settings.deadlineDay = DEFAULT_SETTINGS.deadlineDay;
   settings.deadlineTime = normalizeTime(settings.deadlineTime, DEFAULT_SETTINGS.deadlineTime);
   settings.firstReminderTime = normalizeTime(settings.firstReminderTime, DEFAULT_SETTINGS.firstReminderTime);

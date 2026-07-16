@@ -320,6 +320,7 @@ function isMustFixWarning(warning: string): boolean {
 async function addWorker(event: Event): Promise<void> {
   event.preventDefault();
   try {
+    console.info("[AddEmployee] before count:", state.workers.length);
     const availability = selectedAvailableDays();
     const shiftAvailability = selectedShiftAvailability(availability);
     if (!els.workerName.value.trim() || !/^\d{4}$/.test(els.employeeCode.value) || state.workers.some((worker) => worker.employeeCode === els.employeeCode.value)) {
@@ -344,20 +345,31 @@ async function addWorker(event: Event): Promise<void> {
       closeStart: els.workerCloseStart.value,
       closeEnd: els.workerCloseEnd.value
     }, state);
+    console.info("[AddEmployee] created:", { id: newWorker.id, name: newWorker.name, active: newWorker.active, employeeCode: newWorker.employeeCode });
     state.workers.push(newWorker);
-    selectedWorkerId = newWorker.id;
-    resetAvailabilityDraft();
+    revealNewWorkerInEmployees(newWorker);
+    console.info("[AddEmployee] selected employee:", selectedWorkerId);
+    console.info("[AddEmployee] current filter:", workerFilterValue);
+    console.info("[AddEmployee] current search text:", workerSearchText);
     resetWorkerForm();
     state.schedule = null;
     await saveState();
+    console.info("[AddEmployee] after local save count:", state.workers.length);
     render();
+    console.info("[AddEmployee] visible employees:", visibleEmployeeCount());
     closeAddWorkerModal();
+    showSection("employees");
     try {
       if (!cloudConfig.supabaseUrl || !cloudConfig.anonKey) throw new Error("Supabase is not configured.");
+      console.info("[AddEmployee] Supabase sync started");
       await window.habanerosDesktop.syncCloudEmployees(state.workers);
+      console.info("[AddEmployee] sync result:", "success");
+      console.info("[AddEmployee] employee count after Supabase sync:", state.workers.length);
       els.cloudStatus.textContent = "Employees synced";
       showToast("Worker added and synced successfully.", "good", 9000);
-    } catch {
+    } catch (syncError) {
+      console.info("[AddEmployee] sync result:", syncError instanceof Error ? syncError.message : "failed");
+      console.info("[AddEmployee] employee count after Supabase sync:", state.workers.length);
       showToast("Worker added locally, but Supabase sync failed. Please try Sync Employees later.", "warn", 12000);
     }
   } catch (error) {
@@ -447,7 +459,7 @@ function renderWorkers(): void {
   }
   const worker = findWorker(selectedWorkerId);
   if (!worker) {
-    els.workersList.innerHTML = '<div class="employee-results-list">' + workers.slice(0, 10).map((item) => employeeResultRow(item)).join("") + '</div><div class="empty-state">Select an employee from the dropdown to open the full profile editor.</div>';
+    els.workersList.innerHTML = '<div class="employee-results-list">' + workers.map((item) => employeeResultRow(item)).join("") + '</div><div class="empty-state">Select an employee from the dropdown to open the full profile editor.</div>';
   } else {
     ensureAvailabilityDraft(worker);
     els.workersList.innerHTML = renderSelectedWorkerProfile(worker);
@@ -466,15 +478,35 @@ function renderWorkers(): void {
 function workerMatchesEmployeeFilters(worker: Worker): boolean {
   const search = [worker.name, worker.position, worker.employeeCode, worker.mobilePhone].join(" ").toLowerCase();
   const matchesSearch = !workerSearchText || search.includes(workerSearchText);
-  const matchesFilter =
-    workerFilterValue === "all" ||
+  return matchesSearch && workerMatchesCurrentFilter(worker);
+}
+
+function visibleEmployeeCount(): number {
+  return state.workers.filter(workerMatchesEmployeeFilters).length;
+}
+
+function workerMatchesCurrentFilter(worker: Worker): boolean {
+  return workerFilterValue === "all" ||
     (workerFilterValue === "leads" && worker.isManager) ||
     (workerFilterValue === "nonLeads" && !worker.isManager) ||
     (workerFilterValue === "active" && worker.active) ||
     (workerFilterValue === "inactive" && !worker.active) ||
     (workerFilterValue === "availabilityEntered" && hasAvailabilityEntered(worker)) ||
     (workerFilterValue === "availabilityMissing" && !hasAvailabilityEntered(worker));
-  return matchesSearch && matchesFilter;
+}
+
+function revealNewWorkerInEmployees(worker: Worker): void {
+  const searchable = [worker.name, worker.position, worker.employeeCode, worker.mobilePhone].join(" ").toLowerCase();
+  if (workerSearchText && !searchable.includes(workerSearchText)) {
+    workerSearchText = "";
+    els.workerSearch.value = "";
+  }
+  if (!workerMatchesCurrentFilter(worker)) {
+    workerFilterValue = "all";
+    els.workerFilter.value = "all";
+  }
+  selectedWorkerId = worker.id;
+  resetAvailabilityDraft();
 }
 
 function hasAvailabilityEntered(worker: Worker): boolean {
