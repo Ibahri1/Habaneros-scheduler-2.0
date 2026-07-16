@@ -40,9 +40,10 @@ export function registerSchedulerIpc(): void {
   });
   ipcMain.handle("app:showConfirmation", async (event, input: unknown) => {
     const ownerWindow = BrowserWindow.fromWebContents(event.sender);
-    const message = dialogMessage(input);
+    const message = dialogMessage(typeof input === "object" && input !== null && "message" in input ? (input as { message?: unknown }).message : input);
+    const labels = dialogLabels(input);
     try {
-      const options = { type: "question" as const, buttons: ["Cancel", "Confirm"], defaultId: 0, cancelId: 0, title: "Habaneros Scheduler", message };
+      const options = { type: "question" as const, buttons: [labels.cancelLabel, labels.confirmLabel], defaultId: 0, cancelId: 0, title: "Habaneros Scheduler", message };
       const result = ownerWindow ? await dialog.showMessageBox(ownerWindow, options) : await dialog.showMessageBox(options);
       return result.response === 1;
     } finally {
@@ -129,6 +130,15 @@ function dialogMessage(input: unknown): string {
   return input.slice(0, 4000);
 }
 
+function dialogLabels(input: unknown): { confirmLabel: string; cancelLabel: string } {
+  if (typeof input !== "object" || input === null) return { confirmLabel: "Confirm", cancelLabel: "Cancel" };
+  const labels = input as { confirmLabel?: unknown; cancelLabel?: unknown };
+  return {
+    confirmLabel: typeof labels.confirmLabel === "string" && labels.confirmLabel.trim() ? labels.confirmLabel.slice(0, 80) : "Confirm",
+    cancelLabel: typeof labels.cancelLabel === "string" && labels.cancelLabel.trim() ? labels.cancelLabel.slice(0, 80) : "Cancel"
+  };
+}
+
 async function importData(): Promise<{ canceled: boolean; fileName?: string; content?: string }> {
   const focusedWindow = BrowserWindow.getFocusedWindow();
   const options = { title: "Import Habaneros Scheduler Data", properties: ["openFile" as const], filters: [{ name: "Supported files", extensions: ["json", "csv"] }, { name: "JSON", extensions: ["json"] }, { name: "CSV", extensions: ["csv"] }] };
@@ -140,9 +150,9 @@ async function importData(): Promise<{ canceled: boolean; fileName?: string; con
 }
 
 function toCsv(payload: ExportPayload): string {
-  const rows = [["Name", "Employee Code", "Position", "Lead", "Skill Rating", "No Hour Limits", "Active", "Max Weekly Hours", "Preferred Weekly Hours", "Available Days", "Shift Availability", "Default Open Start", "Default Open End", "Default Close Start", "Default Close End", "Notes"]];
+  const rows = [["Name", "Employee Code", "Mobile Phone", "Position", "Lead", "Skill Rating", "No Hour Limits", "Active", "Max Weekly Hours", "Preferred Weekly Hours", "Available Days", "Shift Availability", "Default Open Start", "Default Open End", "Default Close Start", "Default Close End", "Notes"]];
   for (const worker of payload.state.workers) {
-    rows.push([worker.name, worker.employeeCode, worker.position, worker.isManager ? "Yes" : "No", String(worker.skillRating), worker.noHourLimits ? "Yes" : "No", worker.active ? "Yes" : "No", String(worker.maxWeeklyHours), String(worker.preferredWeeklyHours), worker.availability.join(";"), Object.entries(worker.shiftAvailability).map(([day, shift]) => day + ":" + shift).join(";"), worker.shiftTimes.open.start, worker.shiftTimes.open.end, worker.shiftTimes.close.start, worker.shiftTimes.close.end, worker.notes]);
+    rows.push([worker.name, worker.employeeCode, worker.mobilePhone || "", worker.position, worker.isManager ? "Yes" : "No", String(worker.skillRating), worker.noHourLimits ? "Yes" : "No", worker.active ? "Yes" : "No", String(worker.maxWeeklyHours), String(worker.preferredWeeklyHours), worker.availability.join(";"), Object.entries(worker.shiftAvailability).map(([day, shift]) => day + ":" + shift).join(";"), worker.shiftTimes.open.start, worker.shiftTimes.open.end, worker.shiftTimes.close.start, worker.shiftTimes.close.end, worker.notes]);
   }
   return rows.map((row) => row.map(csvCell).join(",")).join("\n");
 }

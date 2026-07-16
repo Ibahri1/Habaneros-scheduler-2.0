@@ -23,6 +23,26 @@ npm install
 npm run dev
 ```
 
+The desktop app opens to the manager login screen. Enter the local manager password `92118`. Login lasts for the current app session only.
+
+## Local Browser Version
+
+Build and start the manager app in a normal browser with:
+
+```bash
+npm run web:dev
+```
+
+Open `http://127.0.0.1:4173` and enter password `92118`. The browser session remains unlocked until that browser tab/session is closed. To create the browser files without starting the local server, run:
+
+```bash
+npm run web:build
+```
+
+The browser version reuses the desktop renderer and scheduling modules. Its data is stored separately in that browser's local storage, so it does not automatically share the desktop app's JSON file. JSON import/export can be used to move data between them. Browser printing uses the browser print dialog, and browser import/export uses file upload and download instead of Windows file dialogs. Supabase configuration is also stored separately per browser.
+
+The password is intentionally a simple local access screen, not secure online authentication. Because browser code is delivered to the browser, it must not be treated as protection for an internet-hosted manager app. No Supabase service-role key is used or exposed.
+
 ## Build
 
 ```bash
@@ -52,9 +72,11 @@ This runs `npm install` and `npm run dist`, then places the installer and portab
 - `src/main` - Electron main process, windows, IPC, local data storage, app settings.
 - `src/preload` - Secure bridge between Electron and the renderer.
 - `src/renderer` - User interface and renderer-side modules.
+- `src/renderer/browserBridge.ts` - Browser-safe storage, dialogs, printing, import/export, and public Supabase adapter.
 - `src/shared` - Shared types, validation, defaults, and time helpers.
 - `src/main/database` - Storage boundary. Currently JSON file storage; replace this layer later for SQLite.
 - `build` - Windows icon and build resources.
+- `scripts/serve-web.mjs` - Local-only static server for the browser manager app.
 
 ## Data Location
 
@@ -121,12 +143,79 @@ For an existing connected Supabase project, run this exact file once in Supabase
 
 Run only that migration for this update; do not rerun `schema.sql`. It records all seven daily choices, permits the explicit Unavailable value, and backfills legacy submissions so old available days become Both and old unavailable days become Unavailable.
 
+### Required 1.10.2 SMS Reminder Database Update
+
+For an existing connected Supabase project, run this exact file once in Supabase SQL Editor:
+
+`supabase/migrations/1.10.2-sms-reminders.sql`
+
+Run only that migration for this update; do not rerun `schema.sql`. It adds optional employee mobile phone storage, creates `availability_reminder_log`, and updates `manager_upsert_employee` so **Sync Employees** sends phone numbers to Supabase for reminder eligibility.
+
 The schema creates only the Phase 1 tables:
 
 - `employees` stores the desktop worker link, display name, hashed code, and active status.
 - `availability_submissions` stores the employee, week start, available days, timestamp, and review status.
 
 Row Level Security is enabled with no direct anonymous table access. The phone form and desktop app use restricted database functions through the public anon key for Phase 1.
+
+### SMS Availability Reminders
+
+SMS reminders are sent by the Supabase Edge Function in:
+
+`supabase/functions/send-availability-reminders/index.ts`
+
+The desktop app and manager web app never store or expose the Textbelt API key. SMS sending happens only inside the Edge Function. Employees with blank phone numbers are skipped. Inactive employees are skipped. Employees who already submitted availability for the target week are skipped. Duplicate reminders are prevented by `availability_reminder_log`.
+
+Required Supabase secrets:
+
+- `TEXTBELT_API_KEY`
+- `SERVICE_ROLE_KEY`
+- `HABANEROS_TIME_ZONE` set to `America/Los_Angeles` unless the store should use a different timezone
+
+Textbelt setup:
+
+1. Create or open a Textbelt account.
+2. Buy a paid Textbelt API key.
+3. Add the key as the Supabase Edge Function secret named `TEXTBELT_API_KEY`.
+4. In employee profiles, enter mobile numbers in E.164 format when possible, such as `+15551234567`.
+
+Supabase deploy steps:
+
+1. Install and log in to the Supabase CLI.
+2. Link the project if needed: `supabase link --project-ref YOUR_PROJECT_REF`
+3. Add secrets in Supabase:
+   - `TEXTBELT_API_KEY`
+   - `SERVICE_ROLE_KEY`
+   - `HABANEROS_TIME_ZONE=America/Los_Angeles`
+4. Deploy the function with JWT verification enabled:
+   - `supabase functions deploy send-availability-reminders`
+5. In the desktop app, save Supabase settings, save Employee Availability Deadline settings, then click **Sync Employees**.
+
+Safe test steps before automatic reminders:
+
+1. Add your own phone number to **Test SMS Phone Number** in Employee Availability Deadline settings.
+2. Click **Send Test SMS**. This sends only one test text to that number and does not text employees.
+3. Click **Check Reminder Status**. This performs a dry run and shows the target week, reminder type, employees checked, and how many would be skipped.
+4. Confirm employees without phone numbers are skipped.
+5. Confirm inactive employees are skipped.
+6. Confirm employees who already submitted are skipped.
+7. Confirm `availability_reminder_log` stays empty after dry runs and receives rows only after real sends.
+
+Automatic scheduling:
+
+Use Supabase Scheduled Functions or the Supabase dashboard scheduler to run `send-availability-reminders` every 15 minutes. The function checks the configured deadline day and reminder times each run, then only sends when a reminder is due. Keep JWT verification enabled; if the scheduler asks for headers, use:
+
+- `Authorization: Bearer YOUR_SUPABASE_ANON_KEY`
+- `apikey: YOUR_SUPABASE_ANON_KEY`
+- `Content-Type: application/json`
+
+Use this request body:
+
+```json
+{ "mode": "send" }
+```
+
+The function uses the deadline settings saved in manager cloud state. After changing deadline settings in the desktop app, click **Save Deadline Settings** while Supabase is configured so the Edge Function can read the newest settings while the app is closed.
 
 ### Configure the Phone Form
 

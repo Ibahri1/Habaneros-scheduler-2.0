@@ -1,6 +1,6 @@
-import { formatTime, getShiftDurationHours } from "../../../shared/time";
-import { AssignedWorker, DayName, GeneratedSchedule, ShiftName, Worker } from "../../../shared/types";
-import { randomUUID } from "../../shared/ids";
+import { addHoursToTime, formatTime, getShiftDurationHours } from "../../../shared/time";
+import { AssignedWorker, DayName, GeneratedSchedule, ScheduleRules, ShiftName, Worker } from "../../../shared/types";
+import { createId } from "../../shared/ids";
 
 interface AssignmentLocation {
   assignment: AssignedWorker;
@@ -19,7 +19,7 @@ export function normalizeSchedule(schedule: GeneratedSchedule | null, mealBreakH
   schedule?.days.forEach((day) => {
     (["open", "close"] as ShiftName[]).forEach((shiftName) => {
       day.shifts[shiftName].assigned.forEach((assignment) => {
-        if (!assignment.assignmentId) assignment.assignmentId = randomUUID();
+        if (!assignment.assignmentId) assignment.assignmentId = createId();
         refreshAssignment(assignment, mealBreakHours);
       });
     });
@@ -54,7 +54,32 @@ export function duplicateAssignment(schedule: GeneratedSchedule, assignmentId: s
   const source = findAssignment(schedule, assignmentId);
   const targetDay = schedule.days.find((item) => item.day === day);
   if (!source || !targetDay) return;
-  targetDay.shifts[shift].assigned.push({ ...source.assignment, assignmentId: randomUUID() });
+  targetDay.shifts[shift].assigned.push({ ...source.assignment, assignmentId: createId() });
+}
+
+export function addManualAssignment(schedule: GeneratedSchedule, day: DayName, shift: ShiftName, worker: Worker, rules: ScheduleRules): void {
+  const targetDay = schedule.days.find((item) => item.day === day);
+  if (!targetDay) return;
+  const fallbackStart = shift === "open" ? rules.openShift : rules.closeShift;
+  const fallbackEnd = addHoursToTime(fallbackStart, Number(rules.shiftHours) || 8);
+  const defaultTimes = worker.shiftTimes[shift];
+  const start = defaultTimes?.start || fallbackStart;
+  const end = defaultTimes?.end || fallbackEnd;
+  const assignment: AssignedWorker = {
+    assignmentId: createId(),
+    id: worker.id,
+    name: worker.name,
+    position: worker.position,
+    role: worker.role,
+    isManager: worker.isManager,
+    start,
+    end,
+    timeRange: "",
+    durationHours: 0,
+    needsLunch: false
+  };
+  refreshAssignment(assignment, rules.mealBreakHours);
+  targetDay.shifts[shift].assigned.push(assignment);
 }
 
 export function replaceAssignedEmployee(assignment: AssignedWorker, worker: Worker): void {
@@ -72,7 +97,7 @@ export function refreshScheduleCoverage(schedule: GeneratedSchedule): void {
       const shift = day.shifts[shiftName];
       shift.hasManager = shift.assigned.some((assignment) => assignment.isManager);
       shift.hasQualified = shift.hasManager;
-      if (shift.needed > 0 && !shift.hasManager) warnings.push("Missing lead for " + day.day + " " + shiftName + ".");
+      if (shift.needed > 0 && !shift.hasManager) warnings.push("No Lead assigned for " + day.day + " " + shiftName + ".");
       if (shift.assigned.length < shift.needed) warnings.push("Unfilled " + shiftName + " shift on " + day.day + ": " + shift.assigned.length + " of " + shift.needed + " filled.");
     });
     day.warnings = warnings;

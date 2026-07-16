@@ -15,6 +15,7 @@ export interface WorkerShiftTimes { open: ShiftTime; close: ShiftTime; }
 export interface Worker {
   id: string;
   employeeCode: string;
+  mobilePhone: string;
   name: string;
   position: string;
   role: WorkerRole;
@@ -74,7 +75,16 @@ export interface DaySchedule {
 export interface GeneratedSchedule { createdAt: string; days: DaySchedule[]; }
 export interface ScheduleHistoryEntry { id: string; name: string; weekStart: string; schedule: GeneratedSchedule; createdAt: string; }
 export interface AppState { workers: Worker[]; rules: ScheduleRules; schedule: GeneratedSchedule | null; scheduleHistory: ScheduleHistoryEntry[]; }
-export interface AppSettings { darkMode: boolean; confirmBeforeClose: boolean; }
+export interface AvailabilityDeadlineSettings {
+  smsRemindersEnabled: boolean;
+  deadlineDay: DayName;
+  deadlineTime: string;
+  firstReminderTime: string;
+  secondReminderTime: string;
+  firstReminderMessage: string;
+  secondReminderMessage: string;
+}
+export interface AppSettings { darkMode: boolean; confirmBeforeClose: boolean; availabilityDeadline: AvailabilityDeadlineSettings; }
 export interface CloudConfig { supabaseUrl: string; anonKey: string; }
 export interface AvailabilitySubmission {
   id: string;

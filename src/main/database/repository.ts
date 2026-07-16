@@ -4,6 +4,7 @@ import { appStateSchema, appSettingsSchema, cloudConfigSchema } from "../../shar
 import { AppSettings, AppState, CloudConfig } from "../../shared/types";
 import { defaultAppState, defaultSettings, normalizeWorker } from "../../shared/defaults";
 import { nextMonday } from "../../shared/time";
+import { normalizeSettings } from "../../shared/availabilityDeadline";
 import { getCloudSettingsPath, getDataDirectory, getDataFilePath } from "./database";
 
 interface DataFile {
@@ -35,7 +36,7 @@ function readDataFile(): DataFile {
     if (!rawState.rules.weekStart) rawState.rules.weekStart = nextMonday();
     rawState.workers = (rawState.workers || []).map((worker) => normalizeWorker(worker, rawState.rules));
     const state = appStateSchema.parse(rawState) as AppState;
-    const settings = appSettingsSchema.parse({ ...fallback.settings, ...(parsed.settings || {}) }) as AppSettings;
+    const settings = appSettingsSchema.parse(normalizeSettings(parsed.settings)) as AppSettings;
     return { state, settings, savedAt: parsed.savedAt || fallback.savedAt };
   } catch (error) {
     const backupPath = path.join(getDataDirectory(), "habaneros-scheduler-data.invalid-" + Date.now() + ".json");
@@ -72,7 +73,7 @@ export class SchedulerRepository {
 
   saveSettings(input: AppSettings): AppSettings {
     const data = readDataFile();
-    const settings = appSettingsSchema.parse(input) as AppSettings;
+    const settings = appSettingsSchema.parse(normalizeSettings(input)) as AppSettings;
     writeDataFile({ ...data, settings });
     return settings;
   }

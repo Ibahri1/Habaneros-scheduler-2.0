@@ -1,5 +1,69 @@
 # Changelog
 
+## 1.10.7 - 2026-07-15
+
+- Updated Save Employee Availability to show the exact saved confirmation after a successful save, then return to the employee selector/list view.
+- Added a labeled cancel confirmation for availability edits with "Yes, cancel changes" and "No, keep editing" choices.
+- Kept failed availability saves on the selected employee profile so managers can retry without losing draft changes.
+
+## 1.10.6 - 2026-07-15
+
+- Replaced the Employees card grid with a search, employee selector, filters, and one full-width employee profile editor.
+- Added Availability entered / Availability not entered status indicators to employee selection and the selected profile view.
+- Changed employee availability editing to use a draft workflow with Save Employee Availability and Cancel, including a warning before switching employees with unsaved availability changes.
+- Added availability-specific filters for employees with or without saved availability while preserving existing add, edit, delete, deactivate, phone, code, Lead, skill, and Supabase sync behavior.
+
+## 1.10.5 - 2026-07-15
+
+- Added an Enable SMS reminders setting under Availability Reminders so text messaging can be turned off without removing deadline tracking.
+- Updated the reminder status preview, dashboard summary, test SMS control, and Supabase reminder function to clearly respect disabled SMS reminders.
+- Made the Schedule Rules card more visible on the Schedule tab with helper text, a stronger card style, and an Edit/Hide Schedule Rules control.
+
+## 1.10.4 - 2026-07-15
+
+- Moved Schedule Rules from Settings to the top of the Schedule tab without changing saved rule fields or scheduling behavior.
+- Made Schedule Rules collapsed by default with a compact summary of week start, shift times, default hours, lunch timing, and staffing totals.
+- Replaced the redundant Dashboard "Manager Home" heading with a cleaner Quick Actions area below the app header/navigation.
+
+## 1.10.3 - 2026-07-15
+
+- Added main navigation for Dashboard, Employees, Availability, Schedule, History, and Settings.
+- Moved Add Employee into a focused modal and simplified employee cards so advanced details stay hidden until editing.
+- Reorganized Schedule Rules and Availability Reminder controls under Settings while preserving existing scheduling and reminder behavior.
+- Added schedule history single-delete, multi-select, select-all, and bulk-delete controls with confirmations.
+- Added visible add-worker success and Supabase-sync warning notifications while preserving local employee saves if sync fails.
+
+## 1.10.2 - 2026-07-12
+
+- Added optional Mobile Phone Number to employee profiles, manager web profiles, JSON storage, CSV import/export, cloud save, and Supabase employee sync.
+- Added SMS reminder status and single-number test SMS controls to the Employee Availability Deadline settings.
+- Added a Supabase migration for employee phone storage, reminder logging, and the updated employee sync RPC.
+- Added the `send-availability-reminders` Supabase Edge Function for deadline-based SMS reminders without exposing SMS provider credentials in frontend code.
+- Updated the SMS Edge Function instructions to use the Supabase-supported `SERVICE_ROLE_KEY` secret name.
+- Replaced Twilio SMS sending with Textbelt using the `TEXTBELT_API_KEY` Supabase Edge Function secret.
+
+## 1.10.1 - 2026-07-12
+
+- Added configurable employee availability deadline settings for deadline day, deadline time, first reminder time, second reminder time, and both reminder messages.
+- Added deadline-aware Availability Status counts for Submitted, Waiting, and Missing employees.
+- Replaced hardcoded Tuesday assumptions in manager status/reminder preparation with settings-driven deadline calculations.
+- Added safe defaults so existing installs migrate to Tuesday at 11:59 PM with noon and 8:00 PM reminders.
+
+## 1.10.0 - 2026-07-09
+
+- Added a manager home dashboard with quick links for Employees, Availability Submissions, Generate Schedule, Schedule History, and Settings.
+- Added a Needs Attention summary for pending submissions, schedule coverage issues, Lead gaps, and lunch review items.
+- Added employee search and simple worker filters for all, Leads, Non-Leads, active, inactive, and available workers.
+- Improved employee cards with clearer Lead, skill, active, no-hour-limits, availability, and default shift-time summaries.
+- Added a small save-status indicator and clearer confirmation messages for import, clear availability, employee deletion, and history deletion.
+- Added a None option to generated schedule assignment dropdowns so managers can clear a schedule slot without changing employee profiles.
+- Moved printed schedule warnings under each individual day, including compact lunch lines such as "Lunch: John, Maria".
+- Improved schedule generation to fill the most constrained short-staffed shifts first after Lead coverage is attempted.
+- Kept Lead coverage ahead of extra staffing and preferred non-Leads for extra spots when available.
+- Added inline Open/Close dropdown placeholders for missing required staff directly inside generated schedule shifts.
+- Added schedule-only manual assignment creation from missing-staff dropdowns without changing employee profiles or availability.
+- Improved generated warning text for unavailable employees, Lead gaps, maximum days, and hour-limit short-staffing.
+
 ## 1.9.1 - 2026-07-08
 
 - Added an English/Español language toggle to the employee availability phone form.

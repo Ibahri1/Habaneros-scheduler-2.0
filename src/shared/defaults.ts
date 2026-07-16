@@ -16,7 +16,19 @@ export function defaultRules(): ScheduleRules {
 }
 
 export function defaultSettings(): AppSettings {
-  return { darkMode: false, confirmBeforeClose: true };
+  return {
+    darkMode: false,
+    confirmBeforeClose: true,
+    availabilityDeadline: {
+      smsRemindersEnabled: true,
+      deadlineDay: "Tuesday",
+      deadlineTime: "23:59",
+      firstReminderTime: "12:00",
+      secondReminderTime: "20:00",
+      firstReminderMessage: "Habaneros Reminder: Please submit your availability for next week's schedule before tonight's deadline.",
+      secondReminderMessage: "Habaneros Final Reminder: We have not received your availability. Please submit it before tonight's deadline."
+    }
+  };
 }
 
 export function defaultAppState(): AppState {
@@ -55,6 +67,7 @@ export function normalizeWorker(worker: Partial<Worker> & { id: string; name: st
   return {
     id: worker.id,
     employeeCode: /^\d{4}$/.test(String(worker.employeeCode || "")) ? String(worker.employeeCode) : "",
+    mobilePhone: String(worker.mobilePhone || "").trim(),
     name: String(worker.name || "Unnamed Worker"),
     position,
     role,

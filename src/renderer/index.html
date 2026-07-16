@@ -3,16 +3,35 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>Habaneros Scheduler</title>
   <link rel="stylesheet" href="styles/app.css">
+  <link rel="stylesheet" href="styles/login.css">
   <link rel="stylesheet" href="styles/cloud.css">
   <link rel="stylesheet" href="styles/schedule-editor.css">
 </head>
-<body>
+<body class="login-locked">
+  <section id="loginScreen" class="login-screen" aria-labelledby="loginTitle">
+    <form id="loginForm" class="login-card">
+      <img class="login-logo" src="assets/habaneros-logo.png" alt="Habaneros Mexican Food">
+      <h1 id="loginTitle">Staff Scheduling Database</h1>
+      <label>Password <input id="loginPassword" type="password" autocomplete="current-password" required></label>
+      <p id="loginError" class="login-error" role="alert" aria-live="polite"></p>
+      <button class="primary" type="submit">Log In</button>
+    </form>
+  </section>
   <header class="app-header">
     <div class="app-brand"><div class="brand-logo-frame"><img class="brand-logo" src="assets/habaneros-logo.png" alt="Habaneros Mexican Food"></div><p>Staff Scheduling Database</p></div>
+    <nav class="main-nav" aria-label="Main sections">
+      <button class="nav-btn active" data-nav-section="dashboard" type="button">Dashboard</button>
+      <button class="nav-btn" data-nav-section="employees" type="button">Employees</button>
+      <button class="nav-btn" data-nav-section="availability" type="button">Availability</button>
+      <button class="nav-btn" data-nav-section="schedule" type="button">Schedule</button>
+      <button class="nav-btn" data-nav-section="history" type="button">History</button>
+      <button class="nav-btn" data-nav-section="settings" type="button">Settings</button>
+    </nav>
     <div class="header-actions">
+      <span id="saveStatus" class="count-pill status-good">Ready</span>
       <label class="theme-toggle"><input id="darkModeToggle" type="checkbox"> Dark Mode</label>
       <button id="importBtn" class="secondary" type="button">Import</button>
       <button id="exportJsonBtn" class="secondary" type="button">Export JSON</button>
@@ -20,13 +39,32 @@
       <button id="clearBtn" class="secondary danger" type="button">Clear</button>
     </div>
   </header>
+  <div id="toast" class="app-toast" role="status" aria-live="polite" hidden></div>
   <main class="layout">
-    <section class="panel controls-panel">
-      <div class="section-head"><h2>Add Worker</h2><p>Enter workers and update their availability whenever it changes.</p></div>
+    <section class="panel wide dashboard-panel" data-section="dashboard">
+      <div class="section-head"><h2>Quick Actions</h2><p>Start with the most common scheduling tasks.</p></div>
+      <div class="dashboard-grid">
+        <button class="dashboard-card" data-nav-target="availability" type="button"><strong>Review Availability</strong><span id="dashboardSubmissions">Not synced</span></button>
+        <button class="dashboard-card primary-card" data-nav-target="schedule" type="button"><strong>Generate Schedule</strong><span>Build and edit the week</span></button>
+        <button class="dashboard-card" data-open-add-worker type="button"><strong>Add Employee</strong><span id="dashboardEmployees">0 workers</span></button>
+        <button class="dashboard-card" id="dashboardPrintBtn" type="button"><strong>Print Schedule</strong><span id="dashboardPrintStatus">Not generated</span></button>
+        <button class="dashboard-card" data-nav-target="settings" type="button"><strong>Settings</strong><span id="dashboardSettings">Supabase not configured</span></button>
+        <button class="dashboard-card" data-nav-target="history" type="button"><strong>Schedule History</strong><span id="dashboardHistory">0 saved</span></button>
+        <button class="dashboard-card" data-nav-target="availability" type="button"><strong>Missing Availability</strong><span id="dashboardAvailabilityStatus">Submitted: 0 | Waiting: 0 | Missing: 0</span></button>
+      </div>
+    </section>
+    <section class="panel wide attention-panel" data-section="dashboard">
+      <div class="section-head with-action"><div><h2>Needs Attention</h2><p>The most important schedule and submission items to review first.</p></div><span id="attentionStatus" class="count-pill tag good">Good</span></div>
+      <div id="needsAttentionList" class="attention-list"><div class="empty-state">No schedule generated yet.</div></div>
+    </section>
+    <section id="addWorkerSection" class="modal-shell" hidden>
+      <div class="modal-panel">
+      <div class="section-head with-action"><div><h2>Add Employee</h2><p>Enter employee details and availability. The employee is saved locally first, then Supabase sync is attempted.</p></div><button id="closeAddWorkerBtn" class="secondary" type="button">Close</button></div>
       <form id="workerForm" class="worker-form">
         <label>Name <input id="workerName" type="text" autocomplete="off" placeholder="Employee name" required></label>
         <div class="form-grid">
           <label>4-digit employee code <input id="employeeCode" type="text" inputmode="numeric" pattern="\d{4}" maxlength="4" autocomplete="off" placeholder="1234" required></label>
+          <label>Mobile Phone Number <input id="mobilePhone" type="tel" autocomplete="off" placeholder="+15551234567"></label>
           <label>Position <input id="workerPosition" type="text" autocomplete="off" placeholder="Cook, Cashier, Server" value="Crew"></label>
           <label>Lead <select id="isManager"><option value="false">No</option><option value="true">Yes</option></select></label>
           <label>Skill Rating <input id="skillRating" type="number" min="1" max="10" step="1" value="5" required></label>
@@ -42,16 +80,27 @@
         <fieldset><legend>Availability</legend><div id="availabilityChecks" class="day-checks"></div></fieldset>
         <fieldset><legend>Default employee shift times</legend><div class="time-grid"><label>Default Open Start <input id="workerOpenStart" type="time" required></label><label>Default Open End <input id="workerOpenEnd" type="time" required></label><label>Default Close Start <input id="workerCloseStart" type="time" required></label><label>Default Close End <input id="workerCloseEnd" type="time" required></label></div></fieldset>
         <label>Notes <textarea id="workerNotes" rows="3" placeholder="Optional notes"></textarea></label>
-        <button type="submit" class="primary">Add Worker</button>
+        <button type="submit" class="primary">Add Employee</button>
+      </form>
+      </div>
+    </section>
+    <section id="settingsSection" class="panel wide" data-section="settings">
+      <div class="section-head"><h2>Availability Reminders</h2><p>Set when availability is due and when reminder texts should be sent.</p></div>
+      <form id="deadlineSettingsForm" class="cloud-config-grid">
+        <label class="check-row full sms-toggle"><input id="smsRemindersEnabled" type="checkbox"> Enable SMS reminders</label>
+        <label>Deadline Day <select id="deadlineDay"><option>Sunday</option><option>Monday</option><option>Tuesday</option><option>Wednesday</option><option>Thursday</option><option>Friday</option><option>Saturday</option></select></label>
+        <label>Deadline Time <input id="deadlineTime" type="time" required></label>
+        <label>First Reminder Time <input id="firstReminderTime" type="time" required></label>
+        <label>Second Reminder Time <input id="secondReminderTime" type="time" required></label>
+        <label class="full">Reminder #1 Message <textarea id="firstReminderMessage" rows="3" maxlength="500" required></textarea></label>
+        <label class="full">Reminder #2 Message <textarea id="secondReminderMessage" rows="3" maxlength="500" required></textarea></label>
+        <div class="full deadline-preview" id="deadlinePreview"></div>
+        <label>Test SMS Phone Number <input id="testSmsPhone" type="tel" autocomplete="off" placeholder="+15551234567"></label>
+        <div class="actions-row cloud-actions"><button class="primary" type="submit">Save Deadline Settings</button><button id="checkRemindersBtn" class="secondary" type="button">Check Reminder Status</button><button id="sendTestSmsBtn" class="secondary" type="button">Send Test SMS</button></div>
+        <div class="full deadline-preview" id="reminderStatus">Reminder status has not been checked yet.</div>
       </form>
     </section>
-    <section class="panel">
-      <div class="section-head"><h2>Schedule Rules</h2><p>Set the week, default shift times, and staffing needed for each day.</p></div>
-      <div class="rules-grid"><label>Week starts <input id="weekStart" type="date"></label><label>Open shift <input id="openShift" type="time" value="08:00"></label><label>Close shift <input id="closeShift" type="time" value="16:00"></label><label>Default hours <input id="shiftHours" type="number" min="2" max="12" step="0.5" value="8"></label><label>Lunch after hours <input id="mealBreakHours" type="number" min="1" max="12" step="0.5" value="6"></label></div>
-      <div class="staffing-table" id="staffingTable"></div>
-      <div class="actions-row"><button id="generateBtn" class="primary" type="button">Generate Schedule</button><button id="printBtn" class="secondary" type="button">Print Schedule</button></div>
-    </section>
-    <section class="panel wide">
+    <section id="cloudSection" class="panel wide" data-section="settings">
       <div class="section-head with-action"><div><h2>Supabase Configuration</h2><p>Connect the employee phone form without replacing local storage.</p></div><span id="cloudStatus" class="count-pill">Not configured</span></div>
       <form id="cloudConfigForm" class="cloud-config-grid">
         <label>Supabase URL <input id="supabaseUrl" type="url" autocomplete="off" placeholder="https://your-project.supabase.co"></label>
@@ -59,11 +108,11 @@
         <div class="actions-row cloud-actions"><button class="primary" type="submit">Save Settings</button><button id="testCloudBtn" class="secondary" type="button">Test Connection</button><button id="syncEmployeesBtn" class="secondary" type="button">Sync Employees</button></div>
       </form>
     </section>
-    <section class="panel wide">
+    <section id="submissionsSection" class="panel wide" data-section="availability">
       <div class="section-head with-action"><div><h2>Availability Submissions</h2><p>Review phone submissions and apply availability manually. Existing schedules are never changed.</p></div><div class="actions-row"><span id="submissionCount" class="count-pill">Not synced</span><button id="refreshSubmissionsBtn" class="secondary" type="button">Refresh</button><button id="applyAllBtn" class="primary" type="button">Apply All</button></div></div>
       <div id="submissionsList" class="submissions-list"><div class="empty-state">Configure Supabase, sync employees, then refresh submissions.</div></div>
     </section>
-    <section class="panel wide">
+    <section class="panel wide" data-section="availability">
       <div class="section-head with-action"><div><h2>Availability History</h2><p>Reviewed, applied, and rejected submissions remain here until permanently deleted.</p></div><span id="historyCount" class="count-pill">Not synced</span></div>
       <div class="history-filters">
         <label>Employee <select id="historyEmployeeFilter"><option value="">All employees</option></select></label>
@@ -72,9 +121,9 @@
       </div>
       <div id="historyList" class="history-list"><div class="empty-state">Refresh submissions to load history.</div></div>
     </section>
-    <section class="panel wide"><div class="section-head with-action"><div><h2>Workers</h2><p>Edit permanent employee details, availability, Lead status, and active status.</p></div><span id="workerCount" class="count-pill">0 workers</span></div><div id="workersList" class="workers-list"></div></section>
-    <section class="panel wide"><div class="section-head with-action"><div><h2>Generated Schedule</h2><p>Edit employees, days, shifts, and times directly in the weekly schedule.</p></div><span id="scheduleStatus" class="count-pill">Not generated</span></div><div id="scheduleOutput" class="schedule-output"></div></section>
-    <section class="panel wide"><div class="section-head with-action"><div><h2>Schedule History</h2><p>View, print, rename, or modify saved schedule snapshots.</p></div><div class="actions-row"><span id="scheduleHistoryCount" class="count-pill">0 saved</span><button id="saveCurrentScheduleBtn" class="secondary" type="button">Save Current Schedule</button></div></div><div id="scheduleHistoryList" class="history-list"></div><div id="scheduleHistoryEditor" class="history-editor" hidden><label>New schedule name <input id="historyEditName" type="text" maxlength="160"></label><label>Week of <input id="historyEditWeek" type="date"></label><button id="saveHistoryModificationsBtn" class="primary" type="button">Save Schedule Modifications</button></div></section>
+    <section id="workersSection" class="panel wide" data-section="employees"><div class="section-head with-action"><div><h2>Employees</h2><p>Search, select one employee, then edit the full profile without scrolling through every worker.</p></div><div class="actions-row"><span id="workerCount" class="count-pill">0 workers</span><button class="primary" data-open-add-worker type="button">+ Add Employee</button></div></div><div class="worker-filters employee-selector-bar"><label>Search <input id="workerSearch" type="search" autocomplete="off" placeholder="Search by name, code, or position"></label><label>Employee <select id="employeeSelector"><option value="">Select an employee</option></select></label><label>Filter <select id="workerFilter"><option value="all">All</option><option value="active">Active</option><option value="inactive">Inactive</option><option value="leads">Leads</option><option value="nonLeads">Non-Leads</option><option value="availabilityEntered">Availability entered</option><option value="availabilityMissing">Availability not entered</option></select></label></div><div id="workersList" class="workers-list employee-profile-host"></div></section>
+    <section id="scheduleSection" class="panel wide" data-section="schedule"><details id="scheduleRulesDetails" class="schedule-rules-card"><summary><span class="schedule-rules-title"><strong>Schedule Rules</strong><em>Edit shift times, lunch rules, and staffing needs before generating a schedule.</em></span><small id="scheduleRulesSummary">Week starts not set</small><span id="scheduleRulesToggleLabel" class="rules-toggle-label">Edit Schedule Rules</span></summary><div class="schedule-rules-body"><div class="rules-grid"><label>Week starts <input id="weekStart" type="date"></label><label>Open shift <input id="openShift" type="time" value="08:00"></label><label>Close shift <input id="closeShift" type="time" value="16:00"></label><label>Default hours <input id="shiftHours" type="number" min="2" max="12" step="0.5" value="8"></label><label>Lunch after hours <input id="mealBreakHours" type="number" min="1" max="12" step="0.5" value="6"></label></div><div class="staffing-table" id="staffingTable"></div></div></details><div class="section-head with-action"><div><h2>Generated Schedule</h2><p>Generate the schedule, make edits, then print.</p></div><div class="actions-row important-actions"><span id="scheduleStatus" class="count-pill">Not generated</span><button id="generateBtn" class="primary" type="button">Generate Schedule</button><button id="printBtn" class="secondary" type="button">Print Schedule Only</button></div></div><div id="scheduleOutput" class="schedule-output"></div></section>
+    <section id="scheduleHistorySection" class="panel wide" data-section="history"><div class="section-head with-action"><div><h2>Schedule History</h2><p>View, print, rename, modify, or delete saved schedule snapshots.</p></div><div class="actions-row important-actions"><span id="scheduleHistoryCount" class="count-pill">0 saved</span><button id="saveCurrentScheduleBtn" class="secondary" type="button">Save Current Schedule</button><button id="bulkDeleteHistoryBtn" class="secondary danger" type="button">Bulk Delete</button></div></div><div id="scheduleHistoryList" class="history-list"></div><div id="scheduleHistoryEditor" class="history-editor" hidden><label>New schedule name <input id="historyEditName" type="text" maxlength="160"></label><label>Week of <input id="historyEditWeek" type="date"></label><button id="saveHistoryModificationsBtn" class="primary" type="button">Save Schedule Modifications</button></div></section>
   </main>
   <script src="app.js"></script>
 </body>
