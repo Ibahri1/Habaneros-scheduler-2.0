@@ -262,6 +262,48 @@ The function uses the deadline settings saved in manager cloud state. After chan
 
 ### Configure the Phone Form
 
+### Required 1.10.14 Published Schedule Update
+
+For an existing connected Supabase project, run this exact file once in Supabase SQL Editor:
+
+`supabase/migrations/1.10.14-published-schedules.sql`
+
+Run only that migration for this update; do not rerun `schema.sql`. It creates `published_schedules`, adds the unique workspace/week rule, enables Row Level Security, and adds these RPC functions:
+
+- `publish_schedule_to_employee_domain`
+- `list_published_schedules`
+- `clear_published_schedule`
+- `clear_all_published_schedules`
+- `get_public_published_schedule`
+
+The employee website can read only the published schedule snapshot through the public RPC. It does not expose manager account data.
+
+To test publishing:
+
+1. Log in to the admin app.
+2. Generate or edit a schedule.
+3. On the Schedule page, click **Push to Employee Domain**.
+4. Confirm the toast says `Schedule pushed to employee website.`
+5. Open **Published** in the admin app and confirm the week is listed.
+
+To test employee viewing:
+
+1. Open the employee availability website.
+2. Click **View Schedule**.
+3. Choose Last Week, Current Week, or Next Week.
+4. Confirm the posted schedule appears for the published week.
+5. Choose a week that has not been published and confirm it says `No schedule has been posted for this week yet.`
+
+To test clearing:
+
+1. Open **Published** in the admin app.
+2. Click **Clear from Employee Domain** for a listed week, or use Clear Last Week / Clear Current Week / Clear Next Week.
+3. Confirm the clear prompt.
+4. Refresh the employee website schedule view for that week.
+5. Confirm the employee website now says `No schedule has been posted for this week yet.`
+
+`employee-availability/config.js` includes an optional `workspaceSlug`. Leave it blank for the current single-Habaneros workspace setup. If you later publish more than one workspace, set it to the workspace slug that should be visible on that employee website.
+
 1. Edit `employee-availability/config.js`.
 2. Replace `https://YOUR-PROJECT.supabase.co` with the Supabase project URL.
 3. Replace `YOUR-PUBLIC-ANON-KEY` with the Supabase anon key. The anon key is intended for public clients; never put the service-role key here.

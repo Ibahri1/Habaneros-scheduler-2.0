@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.10.14 - 2026-07-21
+
+- Added a Push to Employee Domain action for publishing the current generated schedule to Supabase.
+- Added an Employee Website Schedules admin section for viewing and clearing published schedules by week.
+- Added a published schedules Supabase migration with workspace/week uniqueness, authenticated manager RPCs, public employee read RPC, and RLS.
+- Added a View Schedule section to the employee website with Last Week, Current Week, and Next Week schedule lookup.
+
 ## 1.10.13 - 2026-07-21
 
 - Fixed the Supabase Auth login page so the form scrolls vertically when the app window or browser viewport is too short.

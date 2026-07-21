@@ -1,4 +1,4 @@
-import { AppSettings, AppState, CloudConfig } from "../../../shared/types";
+import { AppSettings, AppState, CloudConfig, GeneratedSchedule, PublishedScheduleRecord, PublishedScheduleSummary } from "../../../shared/types";
 
 const AUTH_SESSION_KEY = "habaneros-auth-session";
 
@@ -47,6 +47,15 @@ interface WorkspaceRow {
 
 interface SnapshotRow {
   state_data: WorkspaceCloudSnapshot;
+  updated_at: string;
+}
+
+interface PublishedScheduleRow {
+  id: string;
+  workspace_id: string;
+  week_start: string;
+  schedule_json?: GeneratedSchedule;
+  published_at: string;
   updated_at: string;
 }
 
@@ -120,6 +129,26 @@ export async function saveWorkspaceSnapshot(config: CloudConfig, session: Supaba
   await rpc<unknown>(config, session, "auth_save_workspace_app_state", { p_workspace_id: workspace.id, p_state_data: snapshot });
 }
 
+export async function publishScheduleToEmployeeDomain(config: CloudConfig, session: SupabaseAuthSession, workspaceId: string, weekStart: string, schedule: GeneratedSchedule): Promise<PublishedScheduleRecord> {
+  const rows = await rpc<PublishedScheduleRow[]>(config, session, "publish_schedule_to_employee_domain", { p_workspace_id: workspaceId, p_week_start: weekStart, p_schedule_json: schedule });
+  const row = rows[0];
+  if (!row || !row.schedule_json) throw new Error("The published schedule was not returned.");
+  return publishedRecordFromRow(row);
+}
+
+export async function listPublishedSchedules(config: CloudConfig, session: SupabaseAuthSession, workspaceId: string): Promise<PublishedScheduleSummary[]> {
+  const rows = await rpc<PublishedScheduleRow[]>(config, session, "list_published_schedules", { p_workspace_id: workspaceId });
+  return rows.map(publishedSummaryFromRow);
+}
+
+export async function clearPublishedSchedule(config: CloudConfig, session: SupabaseAuthSession, workspaceId: string, weekStart: string): Promise<void> {
+  await rpc<unknown>(config, session, "clear_published_schedule", { p_workspace_id: workspaceId, p_week_start: weekStart });
+}
+
+export async function clearAllPublishedSchedules(config: CloudConfig, session: SupabaseAuthSession, workspaceId: string): Promise<void> {
+  await rpc<unknown>(config, session, "clear_all_published_schedules", { p_workspace_id: workspaceId });
+}
+
 async function authFetch<T>(config: CloudConfig, path: string, body: Record<string, unknown>): Promise<T> {
   if (!config.supabaseUrl || !config.anonKey) throw new Error("Supabase URL and public anon key are required.");
   const response = await fetch(cleanUrl(config) + path, {
@@ -167,6 +196,14 @@ function sessionFromResponse(response: AuthResponse): SupabaseAuthSession {
     expiresAt: response.expires_at ? response.expires_at * 1000 : Date.now() + Math.max(1, response.expires_in || 3600) * 1000,
     user: { id: response.user.id, email: response.user.email }
   };
+}
+
+function publishedSummaryFromRow(row: PublishedScheduleRow): PublishedScheduleSummary {
+  return { id: row.id, workspaceId: row.workspace_id, weekStart: row.week_start, publishedAt: row.published_at, updatedAt: row.updated_at };
+}
+
+function publishedRecordFromRow(row: PublishedScheduleRow): PublishedScheduleRecord {
+  return { ...publishedSummaryFromRow(row), schedule: row.schedule_json! };
 }
 
 function cleanUrl(config: CloudConfig): string {

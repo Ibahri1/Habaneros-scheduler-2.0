@@ -1,6 +1,6 @@
 import "./browserBridge";
 import { defaultAppState, defaultSettings, defaultWorkerShiftTimes, normalizeWorker } from "../shared/defaults";
-import { DAYS, SHORT_DAYS, AvailabilitySubmission, CloudConfig, DayName, AppSettings, AppState, ExportFormat, ImportResult, ScheduleHistoryEntry, ShiftAvailability, ShiftAvailabilityMap, ShiftName, ShiftSchedule, SubmissionStatus, Worker, WorkerRole } from "../shared/types";
+import { DAYS, SHORT_DAYS, AvailabilitySubmission, CloudConfig, DayName, AppSettings, AppState, ExportFormat, ImportResult, PublishedScheduleSummary, ScheduleHistoryEntry, ShiftAvailability, ShiftAvailabilityMap, ShiftName, ShiftSchedule, SubmissionStatus, Worker, WorkerRole } from "../shared/types";
 import { addDays, formatDate, formatDuration, formatTime, nextMonday } from "../shared/time";
 import { buildReminderMessage, calculateAvailabilityStatus, formatDeadlineSummary, normalizeSettings } from "../shared/availabilityDeadline";
 import { createWorker } from "./modules/employees/employees";
@@ -11,7 +11,7 @@ import { countScheduleWarnings } from "./modules/reports/reports";
 import { applyTheme } from "./modules/settings/settings";
 import { byId, escapeHtml } from "./shared/dom";
 import { createId } from "./shared/ids";
-import { clearAuthSession, createAccount, getOrCreateDefaultWorkspace, loadStoredAuthSession, loadWorkspaceSnapshot, refreshAuthSession, saveWorkspaceSnapshot, sendPasswordReset, signInWithPassword, signOut, storeAuthSession, SupabaseAuthSession, WorkspaceSummary } from "./modules/auth/supabaseAuth";
+import { clearAllPublishedSchedules, clearAuthSession, clearPublishedSchedule, createAccount, getOrCreateDefaultWorkspace, listPublishedSchedules, loadStoredAuthSession, loadWorkspaceSnapshot, publishScheduleToEmployeeDomain, refreshAuthSession, saveWorkspaceSnapshot, sendPasswordReset, signInWithPassword, signOut, storeAuthSession, SupabaseAuthSession, WorkspaceSummary } from "./modules/auth/supabaseAuth";
 
 let state: AppState = defaultAppState();
 let settings: AppSettings = defaultSettings();
@@ -19,6 +19,7 @@ let cloudConfig: CloudConfig = { supabaseUrl: "", anonKey: "" };
 let authSession: SupabaseAuthSession | null = null;
 let activeWorkspace: WorkspaceSummary | null = null;
 let submissions: AvailabilitySubmission[] = [];
+let publishedSchedules: PublishedScheduleSummary[] = [];
 let historyEditSourceId: string | null = null;
 let workerSearchText = "";
 let workerFilterValue = "all";
@@ -88,6 +89,7 @@ const els = {
   scheduleStatus: byId<HTMLSpanElement>("scheduleStatus"),
   generateBtn: byId<HTMLButtonElement>("generateBtn"),
   printBtn: byId<HTMLButtonElement>("printBtn"),
+  pushScheduleBtn: byId<HTMLButtonElement>("pushScheduleBtn"),
   importBtn: byId<HTMLButtonElement>("importBtn"),
   exportJsonBtn: byId<HTMLButtonElement>("exportJsonBtn"),
   exportCsvBtn: byId<HTMLButtonElement>("exportCsvBtn"),
@@ -133,7 +135,14 @@ const els = {
   scheduleHistoryEditor: byId<HTMLDivElement>("scheduleHistoryEditor"),
   historyEditName: byId<HTMLInputElement>("historyEditName"),
   historyEditWeek: byId<HTMLInputElement>("historyEditWeek"),
-  saveHistoryModificationsBtn: byId<HTMLButtonElement>("saveHistoryModificationsBtn")
+  saveHistoryModificationsBtn: byId<HTMLButtonElement>("saveHistoryModificationsBtn"),
+  publishedScheduleCount: byId<HTMLSpanElement>("publishedScheduleCount"),
+  publishedSchedulesList: byId<HTMLDivElement>("publishedSchedulesList"),
+  refreshPublishedSchedulesBtn: byId<HTMLButtonElement>("refreshPublishedSchedulesBtn"),
+  clearAllPublishedSchedulesBtn: byId<HTMLButtonElement>("clearAllPublishedSchedulesBtn"),
+  clearLastWeekBtn: byId<HTMLButtonElement>("clearLastWeekBtn"),
+  clearCurrentWeekBtn: byId<HTMLButtonElement>("clearCurrentWeekBtn"),
+  clearNextWeekBtn: byId<HTMLButtonElement>("clearNextWeekBtn")
 };
 
 const workerIdentityFields = [els.workerName, els.employeeCode, els.workerPosition];
@@ -255,6 +264,7 @@ async function init(): Promise<void> {
   document.body.classList.remove("login-locked");
   els.loginScreen.hidden = true;
   render();
+  void refreshPublishedSchedules(false);
 }
 
 function normalizeLoadedData(): void {
@@ -372,6 +382,7 @@ function bindEvents(): void {
   els.noHourLimits.addEventListener("change", updateAddWorkerHourFields);
   els.generateBtn.addEventListener("click", () => void generateAndSaveSchedule());
   els.printBtn.addEventListener("click", () => void printSchedule());
+  els.pushScheduleBtn.addEventListener("click", () => void pushScheduleToEmployeeDomain());
   els.dashboardPrintBtn.addEventListener("click", () => void printSchedule());
   els.importBtn.addEventListener("click", () => void importData());
   els.exportJsonBtn.addEventListener("click", () => void exportData("json"));
@@ -393,6 +404,11 @@ function bindEvents(): void {
   els.saveCurrentScheduleBtn.addEventListener("click", () => void saveCurrentScheduleToHistory());
   els.bulkDeleteHistoryBtn.addEventListener("click", () => void bulkDeleteScheduleHistory());
   els.saveHistoryModificationsBtn.addEventListener("click", () => void saveHistoryModifications());
+  els.refreshPublishedSchedulesBtn.addEventListener("click", () => void refreshPublishedSchedules());
+  els.clearAllPublishedSchedulesBtn.addEventListener("click", () => void clearAllEmployeeDomainSchedules());
+  els.clearLastWeekBtn.addEventListener("click", () => void clearRelativePublishedSchedule(-7));
+  els.clearCurrentWeekBtn.addEventListener("click", () => void clearRelativePublishedSchedule(0));
+  els.clearNextWeekBtn.addEventListener("click", () => void clearRelativePublishedSchedule(7));
   [els.historyEmployeeFilter, els.historyWeekFilter, els.historyStatusFilter].forEach((filter) => filter.addEventListener("change", renderHistory));
   [els.weekStart, els.openShift, els.closeShift, els.shiftHours, els.mealBreakHours].forEach((input) => input.addEventListener("change", () => void rulesChanged()));
   els.workerSearch.addEventListener("input", () => { workerSearchText = els.workerSearch.value.trim().toLowerCase(); renderWorkers(); });
@@ -458,6 +474,7 @@ function render(): void {
   renderWorkers();
   renderSchedule();
   renderScheduleHistory();
+  renderPublishedSchedules();
   renderDashboard();
   renderNeedsAttention();
   renderAccountSettings();
@@ -909,9 +926,11 @@ async function generateAndSaveSchedule(): Promise<void> {
 function renderSchedule(): void {
   if (!state.schedule) {
     els.scheduleStatus.textContent = "Not generated";
+    els.pushScheduleBtn.disabled = true;
     els.scheduleOutput.innerHTML = '<div class="empty-state">Add workers, confirm rules, then generate a schedule.</div>';
     return;
   }
+  els.pushScheduleBtn.disabled = false;
   const warningCount = countScheduleWarnings(state);
   els.scheduleStatus.textContent = warningCount ? warningCount + " warning" + (warningCount === 1 ? "" : "s") : "Ready";
   els.scheduleOutput.innerHTML = state.schedule.days.map((day) => '<article class="schedule-day"><div class="schedule-day-head"><div><strong>' + day.day + '</strong><div class="small-muted">' + formatDate(day.date) + '</div></div>' + (day.warnings.length ? '<span class="tag bad">' + day.warnings.length + ' issue' + (day.warnings.length === 1 ? '' : 's') + '</span>' : '<span class="tag good">Covered</span>') + '</div><div class="shift-list">' + renderShift(day.day, day.shifts.open, "Opening") + renderShift(day.day, day.shifts.close, "Closing") + '</div>' + (day.warnings.length ? '<div class="warnings">' + day.warnings.map((warning) => '<div class="warning ' + warningClass(warning) + '">' + escapeHtml(warning) + '</div>').join("") + '</div>' : '') + '</article>').join("");
@@ -1130,6 +1149,87 @@ async function saveCurrentScheduleToHistory(): Promise<void> {
   if (!state.schedule) return;
   state.scheduleHistory.unshift(createHistoryEntry("Week of " + formatWeek(state.rules.weekStart), state.rules.weekStart, state.schedule));
   await saveStateAndRender();
+}
+
+async function pushScheduleToEmployeeDomain(): Promise<void> {
+  if (!state.schedule) { await showDialogMessage("Generate a schedule before pushing it to the employee website."); return; }
+  try {
+    const { session, workspace } = await requirePublishedScheduleAccount();
+    await publishScheduleToEmployeeDomain(cloudConfig, session, workspace.id, state.rules.weekStart, state.schedule);
+    await refreshPublishedSchedules(false);
+    showToast("Schedule pushed to employee website.", "good", 9000);
+  } catch (error) {
+    showError("Schedule could not be pushed to the employee website.", error);
+  }
+}
+
+async function refreshPublishedSchedules(showSuccess = true): Promise<void> {
+  try {
+    const { session, workspace } = await requirePublishedScheduleAccount();
+    publishedSchedules = await listPublishedSchedules(cloudConfig, session, workspace.id);
+    renderPublishedSchedules();
+    if (showSuccess) showToast("Published schedules refreshed.", "good", 5000);
+  } catch (error) {
+    publishedSchedules = [];
+    renderPublishedSchedules("Published schedules could not be loaded.");
+    console.warn("Published schedules could not be loaded.", error);
+    if (showSuccess) showError("Published schedules could not be loaded.", error);
+  }
+}
+
+function renderPublishedSchedules(message = ""): void {
+  els.publishedScheduleCount.textContent = publishedSchedules.length + " published";
+  els.clearAllPublishedSchedulesBtn.disabled = publishedSchedules.length === 0;
+  if (message) {
+    els.publishedSchedulesList.innerHTML = '<div class="empty-state">' + escapeHtml(message) + '</div>';
+    return;
+  }
+  if (!publishedSchedules.length) {
+    els.publishedSchedulesList.innerHTML = '<div class="empty-state">No schedules are currently published to the employee website.</div>';
+    return;
+  }
+  els.publishedSchedulesList.innerHTML = publishedSchedules.map((entry) => '<article class="history-row"><div><strong>Week of ' + formatWeek(entry.weekStart) + '</strong><div class="meta">Published ' + formatSubmittedAt(entry.publishedAt) + '</div></div><div class="history-details"><span>Updated: ' + formatSubmittedAt(entry.updatedAt) + '</span><span>Visible on employee website</span></div><button class="secondary danger" data-published-clear="' + entry.weekStart + '" type="button">Clear from Employee Domain</button></article>').join("");
+  els.publishedSchedulesList.querySelectorAll<HTMLButtonElement>("[data-published-clear]").forEach((button) => button.addEventListener("click", () => void clearEmployeeDomainSchedule(button.dataset.publishedClear || "")));
+}
+
+async function clearRelativePublishedSchedule(dayOffset: number): Promise<void> {
+  await clearEmployeeDomainSchedule(addDays(state.rules.weekStart || nextMonday(), dayOffset));
+}
+
+async function clearEmployeeDomainSchedule(weekStart: string): Promise<void> {
+  if (!weekStart) return;
+  if (!await confirmDialog("Are you sure you want to remove this schedule from the employee website?")) return;
+  try {
+    const { session, workspace } = await requirePublishedScheduleAccount();
+    await clearPublishedSchedule(cloudConfig, session, workspace.id, weekStart);
+    publishedSchedules = publishedSchedules.filter((entry) => entry.weekStart !== weekStart);
+    renderPublishedSchedules();
+    showToast("Schedule removed from employee website.", "good", 9000);
+  } catch (error) {
+    showError("Schedule could not be removed from the employee website.", error);
+  }
+}
+
+async function clearAllEmployeeDomainSchedules(): Promise<void> {
+  if (!publishedSchedules.length) return;
+  if (!await confirmDialog("Are you sure you want to remove this schedule from the employee website?")) return;
+  try {
+    const { session, workspace } = await requirePublishedScheduleAccount();
+    await clearAllPublishedSchedules(cloudConfig, session, workspace.id);
+    publishedSchedules = [];
+    renderPublishedSchedules();
+    showToast("Schedule removed from employee website.", "good", 9000);
+  } catch (error) {
+    showError("Published schedules could not be removed from the employee website.", error);
+  }
+}
+
+async function requirePublishedScheduleAccount(): Promise<{ session: SupabaseAuthSession; workspace: WorkspaceSummary }> {
+  if (!authSession || !activeWorkspace) throw new Error("Log in before publishing schedules.");
+  if (!cloudConfig.supabaseUrl || !cloudConfig.anonKey) throw new Error("Supabase is not configured.");
+  authSession = await refreshAuthSession(cloudConfig, authSession);
+  storeAuthSession(authSession);
+  return { session: authSession, workspace: activeWorkspace };
 }
 
 async function saveHistoryModifications(): Promise<void> {

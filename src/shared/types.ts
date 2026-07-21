@@ -75,6 +75,8 @@ export interface DaySchedule {
 export interface GeneratedSchedule { createdAt: string; days: DaySchedule[]; }
 export interface ScheduleHistoryEntry { id: string; name: string; weekStart: string; schedule: GeneratedSchedule; createdAt: string; }
 export interface AppState { workers: Worker[]; rules: ScheduleRules; schedule: GeneratedSchedule | null; scheduleHistory: ScheduleHistoryEntry[]; }
+export interface PublishedScheduleSummary { id: string; workspaceId: string; weekStart: string; publishedAt: string; updatedAt: string; }
+export interface PublishedScheduleRecord extends PublishedScheduleSummary { schedule: GeneratedSchedule; }
 export interface AvailabilityDeadlineSettings {
   smsRemindersEnabled: boolean;
   deadlineDay: DayName;

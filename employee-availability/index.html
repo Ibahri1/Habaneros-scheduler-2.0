@@ -16,8 +16,12 @@
         <button id="languageSpanish" type="button" data-language="es">Español</button>
       </div>
       <h1 data-i18n="title">Employee Availability</h1>
+      <nav class="site-tabs" aria-label="Employee website sections">
+        <button id="availabilityTab" class="active" type="button" data-i18n="availabilityTab">Submit Availability</button>
+        <button id="scheduleTab" type="button" data-i18n="scheduleTab">View Schedule</button>
+      </nav>
     </header>
-    <section id="loginPanel">
+    <section id="loginPanel" data-availability-section>
       <form id="codeForm">
         <label for="employeeCode" data-i18n="employeeCode">Employee Code</label>
         <input id="employeeCode" type="password" inputmode="numeric" pattern="\d{4}" maxlength="4" autocomplete="one-time-code" required>
@@ -25,7 +29,7 @@
         <button type="submit" data-i18n="continue">Continue</button>
       </form>
     </section>
-    <section id="availabilityPanel" hidden>
+    <section id="availabilityPanel" data-availability-section hidden>
       <div class="welcome"><span data-i18n="welcome">Welcome</span>, <strong id="employeeName"></strong></div>
       <form id="availabilityForm">
         <label for="weekStart" data-i18n="weekOf">Week of</label>
@@ -35,13 +39,18 @@
         <button id="startOver" class="secondary" type="button" data-i18n="useDifferentCode">Use a different code</button>
       </form>
     </section>
-    <section id="successPanel" class="success-panel" hidden>
+    <section id="successPanel" class="success-panel" data-availability-section hidden>
       <div class="success-check" aria-hidden="true">&#10003;</div>
       <h2 data-i18n="successTitle">Availability Submitted Successfully</h2>
       <p data-i18n="successReceived">Your lead has received your availability for:</p>
       <strong id="successWeek"></strong>
       <p data-i18n="thankYou">Thank you.</p>
       <button id="submitAnother" type="button" data-i18n="submitAnother">Submit Another Week</button>
+    </section>
+    <section id="schedulePanel" hidden>
+      <label for="scheduleWeek" data-i18n="scheduleWeek">Schedule week</label>
+      <select id="scheduleWeek"></select>
+      <div id="postedSchedule" class="posted-schedule"></div>
     </section>
     <div id="message" role="status" aria-live="polite"></div>
   </main>

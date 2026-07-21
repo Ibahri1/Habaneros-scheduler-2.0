@@ -7,6 +7,17 @@ const TRANSLATIONS = {
   en: {
     locale: undefined,
     title: "Employee Availability",
+    availabilityTab: "Submit Availability",
+    scheduleTab: "View Schedule",
+    scheduleWeek: "Schedule week",
+    lastWeek: "Last week",
+    currentWeek: "Current week",
+    nextWeek: "Next week",
+    noSchedulePosted: "No schedule has been posted for this week yet.",
+    scheduleLoadFailed: "Schedule could not be loaded. Please try again.",
+    openShift: "Open",
+    closeShift: "Close",
+    weekOfSchedule: "Week of",
     employeeCode: "Employee Code",
     employeeCodeHint: "Enter your 4-digit employee code",
     continue: "Continue",
@@ -56,6 +67,17 @@ const TRANSLATIONS = {
   es: {
     locale: "es-US",
     title: "Disponibilidad del Empleado",
+    availabilityTab: "Enviar Disponibilidad",
+    scheduleTab: "Ver Horario",
+    scheduleWeek: "Semana del horario",
+    lastWeek: "Semana pasada",
+    currentWeek: "Semana actual",
+    nextWeek: "Próxima semana",
+    noSchedulePosted: "Todavía no se ha publicado el horario para esta semana.",
+    scheduleLoadFailed: "No se pudo cargar el horario. Inténtalo de nuevo.",
+    openShift: "Abrir",
+    closeShift: "Cerrar",
+    weekOfSchedule: "Semana de",
     employeeCode: "Código del Empleado",
     employeeCodeHint: "Ingresa tu código de empleado de 4 dígitos",
     continue: "Continuar",
@@ -108,13 +130,19 @@ const availabilityForm = document.getElementById("availabilityForm");
 const loginPanel = document.getElementById("loginPanel");
 const availabilityPanel = document.getElementById("availabilityPanel");
 const successPanel = document.getElementById("successPanel");
+const schedulePanel = document.getElementById("schedulePanel");
 const codeInput = document.getElementById("employeeCode");
 const weekStart = document.getElementById("weekStart");
+const scheduleWeek = document.getElementById("scheduleWeek");
+const postedSchedule = document.getElementById("postedSchedule");
 const message = document.getElementById("message");
 const daysContainer = document.getElementById("days");
 const languageButtons = document.querySelectorAll("[data-language]");
+const availabilityTab = document.getElementById("availabilityTab");
+const scheduleTab = document.getElementById("scheduleTab");
 let verifiedCode = "";
 let currentLanguage = localStorage.getItem(LANGUAGE_KEY) === "es" ? "es" : "en";
+let activeSiteSection = "availability";
 
 renderLanguage();
 
@@ -163,6 +191,12 @@ document.getElementById("submitAnother").addEventListener("click", () => {
   showPanel(availabilityPanel);
   showMessage("");
 });
+availabilityTab.addEventListener("click", () => showSiteSection("availability"));
+scheduleTab.addEventListener("click", () => {
+  showSiteSection("schedule");
+  loadPublishedSchedule();
+});
+scheduleWeek.addEventListener("change", loadPublishedSchedule);
 
 function resetLogin() {
   verifiedCode = "";
@@ -176,6 +210,11 @@ function resetLogin() {
 
 function populateWeeks() {
   weekStart.innerHTML = '<option value="">' + t("selectWeek") + '</option>' + upcomingSundays().map((date) => '<option value="' + toIsoDate(date) + '">' + t("weekOf") + " " + formatDate(date, currentLocale()) + '</option>').join("");
+}
+
+function populateScheduleWeeks() {
+  const weeks = scheduleWeeks();
+  scheduleWeek.innerHTML = weeks.map((item) => '<option value="' + item.value + '">' + t(item.label) + " - " + t("weekOfSchedule") + " " + formatDate(item.date, currentLocale()) + '</option>').join("");
 }
 
 function renderLanguage() {
@@ -192,6 +231,8 @@ function renderLanguage() {
   });
   renderDays(selectedValues);
   populateWeeks();
+  populateScheduleWeeks();
+  if (activeSiteSection === "schedule") loadPublishedSchedule();
 }
 
 function renderDays(selectedValues = {}) {
@@ -201,7 +242,22 @@ function renderDays(selectedValues = {}) {
   }).join("");
 }
 
-function showPanel(panel) { [loginPanel, availabilityPanel, successPanel].forEach((item) => { item.hidden = item !== panel; }); }
+function showPanel(panel) {
+  if (activeSiteSection !== "availability") return;
+  [loginPanel, availabilityPanel, successPanel].forEach((item) => { item.hidden = item !== panel; });
+}
+function showSiteSection(section) {
+  activeSiteSection = section;
+  availabilityTab.classList.toggle("active", section === "availability");
+  scheduleTab.classList.toggle("active", section === "schedule");
+  schedulePanel.hidden = section !== "schedule";
+  document.querySelectorAll("[data-availability-section]").forEach((item) => { item.hidden = section !== "availability" || item !== loginPanel; });
+  if (section === "availability") {
+    resetLogin();
+  } else {
+    showMessage("");
+  }
+}
 function showMessage(text) { message.textContent = text; }
 function setBusy(busy) { document.querySelectorAll("button").forEach((button) => { button.disabled = busy; }); }
 function selected(current, option) { return current === option ? "selected" : ""; }
@@ -222,4 +278,58 @@ function localizeError(message) {
     "Available days do not match shift availability.": "daysMismatch"
   };
   return knownMessages[normalized] ? t(knownMessages[normalized]) : normalized;
+}
+
+async function loadPublishedSchedule() {
+  try {
+    const week = scheduleWeek.value || scheduleWeeks()[1].value;
+    if (!week) return;
+    postedSchedule.innerHTML = '<div class="schedule-empty">Loading schedule...</div>';
+    const config = window.HABANEROS_SUPABASE || {};
+    const rows = await rpc("get_public_published_schedule", { p_week_start: week, p_workspace_slug: config.workspaceSlug || "" });
+    if (!Array.isArray(rows) || !rows[0]?.schedule_json) {
+      postedSchedule.innerHTML = '<div class="schedule-empty">' + t("noSchedulePosted") + '</div>';
+      return;
+    }
+    renderPostedSchedule(rows[0].schedule_json, rows[0].week_start || week);
+  } catch (error) {
+    postedSchedule.innerHTML = '<div class="schedule-empty">' + (localizeError(error.message) || t("scheduleLoadFailed")) + '</div>';
+  }
+}
+
+function renderPostedSchedule(schedule, week) {
+  postedSchedule.innerHTML = '<div class="posted-week"><strong>' + t("weekOfSchedule") + " " + formatWeek(week, currentLocale()) + '</strong></div>' + (schedule.days || []).map((day) => '<article class="posted-day"><h2>' + escapeHtml(tDay(day.day) || day.day) + '</h2><p>' + escapeHtml(formatWeek(day.date, currentLocale())) + '</p>' + renderPostedShift(day.shifts?.open, t("openShift")) + renderPostedShift(day.shifts?.close, t("closeShift")) + '</article>').join("");
+}
+
+function renderPostedShift(shift, label) {
+  const assigned = Array.isArray(shift?.assigned) ? shift.assigned : [];
+  return '<section class="posted-shift"><h3>' + escapeHtml(label) + '</h3>' + (assigned.length ? assigned.map((worker) => '<div class="posted-worker"><strong>' + escapeHtml(worker.name || "Employee") + '</strong><span>' + escapeHtml(worker.start || "") + ' - ' + escapeHtml(worker.end || "") + '</span>' + (worker.position ? '<em>' + escapeHtml(worker.position) + '</em>' : '') + '</div>').join("") : '<p class="hint">' + t("noSchedulePosted") + '</p>') + '</section>';
+}
+
+function scheduleWeeks(today = new Date()) {
+  const current = currentMonday(today);
+  return [
+    { label: "lastWeek", date: addDays(current, -7), value: toIsoDate(addDays(current, -7)) },
+    { label: "currentWeek", date: current, value: toIsoDate(current) },
+    { label: "nextWeek", date: addDays(current, 7), value: toIsoDate(addDays(current, 7)) }
+  ];
+}
+
+function currentMonday(today) {
+  const date = new Date(today);
+  date.setHours(12, 0, 0, 0);
+  const day = date.getDay();
+  const offset = day === 0 ? -6 : 1 - day;
+  date.setDate(date.getDate() + offset);
+  return date;
+}
+
+function addDays(date, days) {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
 }
