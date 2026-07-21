@@ -15,9 +15,14 @@
     <form id="loginForm" class="login-card">
       <img class="login-logo" src="assets/habaneros-logo.png" alt="Habaneros Mexican Food">
       <h1 id="loginTitle">Staff Scheduling Database</h1>
+      <p class="login-help">Log in with your Supabase account so your scheduler data follows you across desktop and web.</p>
+      <label>Supabase URL <input id="loginSupabaseUrl" type="url" autocomplete="off" placeholder="https://your-project.supabase.co" required></label>
+      <label>Public anon key <input id="loginSupabaseAnonKey" type="password" autocomplete="off" placeholder="Supabase anon key" required></label>
+      <label>Email <input id="loginEmail" type="email" autocomplete="email" required></label>
       <label>Password <input id="loginPassword" type="password" autocomplete="current-password" required></label>
       <p id="loginError" class="login-error" role="alert" aria-live="polite"></p>
       <button class="primary" type="submit">Log In</button>
+      <div class="login-actions"><button id="createAccountBtn" class="secondary" type="button">Create Account</button><button id="forgotPasswordBtn" class="link-button" type="button">Forgot Password</button></div>
     </form>
   </section>
   <header class="app-header">
@@ -85,6 +90,14 @@
       </div>
     </section>
     <section id="settingsSection" class="panel wide" data-section="settings">
+      <div class="section-head with-action"><div><h2>Account</h2><p>Your logged-in workspace controls cloud-saved scheduler data.</p></div><span id="accountSyncStatus" class="count-pill">Signed in</span></div>
+      <div class="cloud-config-grid account-grid">
+        <label>Logged-in email <input id="accountEmail" type="text" readonly></label>
+        <label>Workspace <input id="accountWorkspaceName" type="text" readonly></label>
+        <div class="actions-row cloud-actions"><button id="importLocalAccountBtn" class="secondary" type="button">Import Local Data Into Account</button><button id="logoutBtn" class="secondary danger" type="button">Log Out</button></div>
+      </div>
+    </section>
+    <section class="panel wide" data-section="settings">
       <div class="section-head"><h2>Availability Reminders</h2><p>Set when availability is due and when reminder texts should be sent.</p></div>
       <form id="deadlineSettingsForm" class="cloud-config-grid">
         <label class="check-row full sms-toggle"><input id="smsRemindersEnabled" type="checkbox"> Enable SMS reminders</label>

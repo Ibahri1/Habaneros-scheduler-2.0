@@ -5,6 +5,7 @@ import { normalizeSettings } from "../shared/availabilityDeadline";
 const STATE_KEY = "habaneros-web-state";
 const SETTINGS_KEY = "habaneros-web-settings";
 const CLOUD_KEY = "habaneros-web-cloud-config";
+const AUTH_SESSION_KEY = "habaneros-auth-session";
 const MANAGER_STATE_ID = "habaneros-manager";
 
 interface ManagerCloudState {
@@ -67,6 +68,7 @@ if (!window.habanerosDesktop) {
 
 async function loadManagerState(): Promise<AppState> {
   const localState = readStorage(STATE_KEY, defaultAppState());
+  if (hasAuthSession()) return localState;
   const config = readStorage(CLOUD_KEY, { supabaseUrl: "", anonKey: "" });
   if (!hasCloudConfig(config)) {
     setCloudStatus("Cloud save not configured");
@@ -97,6 +99,7 @@ async function loadManagerState(): Promise<AppState> {
 async function saveManagerCloudConfig(config: CloudConfig): Promise<CloudConfig> {
   const cleanConfig = { supabaseUrl: config.supabaseUrl.trim().replace(/\/$/, ""), anonKey: config.anonKey.trim() };
   writeStorage(CLOUD_KEY, cleanConfig);
+  if (hasAuthSession()) return structuredClone(cleanConfig);
   if (!hasCloudConfig(cleanConfig)) {
     setCloudStatus("Cloud save not configured");
     return structuredClone(cleanConfig);
@@ -121,6 +124,7 @@ async function saveManagerCloudConfig(config: CloudConfig): Promise<CloudConfig>
 }
 
 function queueManagerCloudSave(): void {
+  if (hasAuthSession()) return;
   const config = readStorage(CLOUD_KEY, { supabaseUrl: "", anonKey: "" });
   if (!hasCloudConfig(config)) {
     setCloudStatus("Cloud save not configured");
@@ -169,6 +173,10 @@ function persistCloudPayload(payload: ManagerCloudState): void {
 
 function hasCloudConfig(config: CloudConfig): boolean {
   return Boolean(config.supabaseUrl && config.anonKey);
+}
+
+function hasAuthSession(): boolean {
+  return Boolean(localStorage.getItem(AUTH_SESSION_KEY));
 }
 
 function hasMeaningfulState(state: AppState): boolean {

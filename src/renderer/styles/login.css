@@ -2,16 +2,19 @@
   position: fixed;
   inset: 0;
   z-index: 1000;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 24px;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: var(--bg);
 }
 
 .login-screen[hidden] { display: none; }
 
 .login-card {
-  width: min(400px, 100%);
+  width: min(460px, 100%);
   display: grid;
   gap: 16px;
   padding: 28px;
@@ -19,6 +22,7 @@
   border: 1px solid var(--line);
   border-radius: 8px;
   box-shadow: 0 16px 40px rgba(20, 30, 20, .14);
+  margin-block: auto;
 }
 
 .login-logo {
@@ -29,5 +33,34 @@
 }
 
 .login-card h1 { text-align: center; font-size: 1.35rem; }
+.login-help { margin: 0; color: var(--muted); text-align: center; }
 .login-error { min-height: 1.25rem; margin: 0; color: var(--bad); font-weight: 700; }
 .login-locked > .app-header, .login-locked > .layout { visibility: hidden; }
+.login-actions { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+.link-button {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-weight: 700;
+  cursor: pointer;
+}
+.account-grid input[readonly] {
+  background: var(--soft);
+  color: var(--text);
+}
+
+@media (max-height: 680px) {
+  .login-screen {
+    align-items: flex-start;
+    padding-block: 18px;
+  }
+}
+
+@media (max-width: 520px) {
+  .login-screen { padding-inline: 14px; }
+  .login-card { padding: 22px; }
+  .login-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

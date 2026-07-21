@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.10.13 - 2026-07-21
+
+- Fixed the Supabase Auth login page so the form scrolls vertically when the app window or browser viewport is too short.
+- Kept the login card centered on taller screens while preserving access to all fields, buttons, and messages on smaller screens.
+
+## 1.10.12 - 2026-07-20
+
+- Added Supabase Auth email/password login for the desktop and manager web app.
+- Added a signed-in Account section showing the current email, workspace, sync status, local import action, and logout.
+- Added authenticated workspace cloud snapshots so scheduler data can follow the logged-in user across devices while keeping local storage as the offline cache.
+- Added an additive Supabase migration for workspaces, workspace memberships, workspace app state, authenticated RPCs, and Row Level Security policies.
+- Kept the existing legacy manager cloud-save tables/functions in place for compatibility while authenticated sessions use workspace-specific saves.
+
 ## 1.10.11 - 2026-07-16
 
 - Changed SMS reminders to default to disabled for fresh installs and missing settings.

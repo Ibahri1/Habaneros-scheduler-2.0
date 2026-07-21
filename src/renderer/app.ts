@@ -11,11 +11,13 @@ import { countScheduleWarnings } from "./modules/reports/reports";
 import { applyTheme } from "./modules/settings/settings";
 import { byId, escapeHtml } from "./shared/dom";
 import { createId } from "./shared/ids";
-import { requireManagerLogin } from "./modules/auth/login";
+import { clearAuthSession, createAccount, getOrCreateDefaultWorkspace, loadStoredAuthSession, loadWorkspaceSnapshot, refreshAuthSession, saveWorkspaceSnapshot, sendPasswordReset, signInWithPassword, signOut, storeAuthSession, SupabaseAuthSession, WorkspaceSummary } from "./modules/auth/supabaseAuth";
 
 let state: AppState = defaultAppState();
 let settings: AppSettings = defaultSettings();
 let cloudConfig: CloudConfig = { supabaseUrl: "", anonKey: "" };
+let authSession: SupabaseAuthSession | null = null;
+let activeWorkspace: WorkspaceSummary | null = null;
 let submissions: AvailabilitySubmission[] = [];
 let historyEditSourceId: string | null = null;
 let workerSearchText = "";
@@ -25,14 +27,22 @@ let selectedWorkerId = "";
 let availabilityDraftWorkerId = "";
 let availabilityDraft: ShiftAvailabilityMap = {};
 let availabilityDraftDirty = false;
+let appEventsBound = false;
+let workspaceHydrated = false;
+let workspaceSaveChain = Promise.resolve();
 
 const els = {
   loginScreen: byId<HTMLElement>("loginScreen"),
   toast: byId<HTMLDivElement>("toast"),
   addWorkerSection: byId<HTMLElement>("addWorkerSection"),
   loginForm: byId<HTMLFormElement>("loginForm"),
+  loginSupabaseUrl: byId<HTMLInputElement>("loginSupabaseUrl"),
+  loginSupabaseAnonKey: byId<HTMLInputElement>("loginSupabaseAnonKey"),
+  loginEmail: byId<HTMLInputElement>("loginEmail"),
   loginPassword: byId<HTMLInputElement>("loginPassword"),
   loginError: byId<HTMLElement>("loginError"),
+  createAccountBtn: byId<HTMLButtonElement>("createAccountBtn"),
+  forgotPasswordBtn: byId<HTMLButtonElement>("forgotPasswordBtn"),
   saveStatus: byId<HTMLSpanElement>("saveStatus"),
   dashboardEmployees: byId<HTMLSpanElement>("dashboardEmployees"),
   dashboardSubmissions: byId<HTMLSpanElement>("dashboardSubmissions"),
@@ -96,6 +106,11 @@ const els = {
   checkRemindersBtn: byId<HTMLButtonElement>("checkRemindersBtn"),
   sendTestSmsBtn: byId<HTMLButtonElement>("sendTestSmsBtn"),
   reminderStatus: byId<HTMLDivElement>("reminderStatus"),
+  accountEmail: byId<HTMLInputElement>("accountEmail"),
+  accountWorkspaceName: byId<HTMLInputElement>("accountWorkspaceName"),
+  accountSyncStatus: byId<HTMLSpanElement>("accountSyncStatus"),
+  importLocalAccountBtn: byId<HTMLButtonElement>("importLocalAccountBtn"),
+  logoutBtn: byId<HTMLButtonElement>("logoutBtn"),
   cloudConfigForm: byId<HTMLFormElement>("cloudConfigForm"),
   supabaseUrl: byId<HTMLInputElement>("supabaseUrl"),
   supabaseAnonKey: byId<HTMLInputElement>("supabaseAnonKey"),
@@ -123,7 +138,99 @@ const els = {
 
 const workerIdentityFields = [els.workerName, els.employeeCode, els.workerPosition];
 
-requireManagerLogin({ screen: els.loginScreen, form: els.loginForm, password: els.loginPassword, error: els.loginError }, () => void init());
+void boot();
+
+async function boot(): Promise<void> {
+  try {
+    cloudConfig = await window.habanerosDesktop.loadCloudConfig();
+  } catch {
+    cloudConfig = { supabaseUrl: "", anonKey: "" };
+  }
+  renderLoginDefaults();
+  bindLoginEvents();
+  await restoreStoredAccountSession();
+  if (authSession && activeWorkspace) void init();
+}
+
+function renderLoginDefaults(): void {
+  els.loginSupabaseUrl.value = cloudConfig.supabaseUrl;
+  els.loginSupabaseAnonKey.value = cloudConfig.anonKey;
+}
+
+function bindLoginEvents(): void {
+  els.loginForm.addEventListener("submit", (event) => void handleLogin(event));
+  els.createAccountBtn.addEventListener("click", () => void handleCreateAccount());
+  els.forgotPasswordBtn.addEventListener("click", () => void handleForgotPassword());
+}
+
+async function restoreStoredAccountSession(): Promise<void> {
+  const stored = loadStoredAuthSession();
+  if (!stored || !readLoginCloudConfig().supabaseUrl || !readLoginCloudConfig().anonKey) return;
+  try {
+    cloudConfig = readLoginCloudConfig();
+    authSession = await refreshAuthSession(cloudConfig, stored);
+    storeAuthSession(authSession);
+    activeWorkspace = await getOrCreateDefaultWorkspace(cloudConfig, authSession);
+  } catch (error) {
+    console.warn("Saved account session could not be restored.", error);
+    clearAuthSession();
+    authSession = null;
+    activeWorkspace = null;
+  }
+}
+
+async function handleLogin(event: Event): Promise<void> {
+  event.preventDefault();
+  await authenticateWithAccount("login");
+}
+
+async function handleCreateAccount(): Promise<void> {
+  await authenticateWithAccount("create");
+}
+
+async function authenticateWithAccount(mode: "login" | "create"): Promise<void> {
+  try {
+    setLoginBusy(true);
+    cloudConfig = readLoginCloudConfig();
+    const email = els.loginEmail.value.trim();
+    const password = els.loginPassword.value;
+    if (!email || !password) throw new Error("Enter your email and password.");
+    authSession = mode === "create" ? await createAccount(cloudConfig, email, password) : await signInWithPassword(cloudConfig, email, password);
+    storeAuthSession(authSession);
+    activeWorkspace = await getOrCreateDefaultWorkspace(cloudConfig, authSession);
+    cloudConfig = await window.habanerosDesktop.saveCloudConfig(cloudConfig);
+    els.loginError.textContent = "";
+    await init();
+  } catch (error) {
+    els.loginError.textContent = error instanceof Error ? error.message : "Login failed. Please try again.";
+    clearAuthSession();
+    authSession = null;
+    activeWorkspace = null;
+  } finally {
+    setLoginBusy(false);
+  }
+}
+
+async function handleForgotPassword(): Promise<void> {
+  try {
+    const config = readLoginCloudConfig();
+    const email = els.loginEmail.value.trim();
+    if (!email) throw new Error("Enter your email address first.");
+    await sendPasswordReset(config, email);
+    els.loginError.textContent = "Password reset email sent if the account exists.";
+  } catch (error) {
+    els.loginError.textContent = error instanceof Error ? error.message : "Password reset could not be started.";
+  }
+}
+
+function readLoginCloudConfig(): CloudConfig {
+  return { supabaseUrl: els.loginSupabaseUrl.value.trim().replace(/\/$/, ""), anonKey: els.loginSupabaseAnonKey.value.trim() };
+}
+
+function setLoginBusy(isBusy: boolean): void {
+  els.loginForm.querySelectorAll<HTMLInputElement | HTMLButtonElement>("input, button").forEach((control) => { control.disabled = isBusy; });
+  if (isBusy) els.loginError.textContent = "Signing in...";
+}
 
 async function init(): Promise<void> {
   try {
@@ -136,13 +243,17 @@ async function init(): Promise<void> {
   }
 
   normalizeLoadedData();
+  await hydrateWorkspaceData();
   renderCloudConfig();
+  renderAccountSettings();
   renderAvailabilityInputs();
   renderStaffingInputs();
   bindEvents();
   updateAddWorkerHourFields();
   resetWorkerTimeInputs();
   showSection("dashboard");
+  document.body.classList.remove("login-locked");
+  els.loginScreen.hidden = true;
   render();
 }
 
@@ -157,7 +268,101 @@ function normalizeLoadedData(): void {
   renderDeadlineSettings();
 }
 
+async function hydrateWorkspaceData(): Promise<void> {
+  if (workspaceHydrated || !authSession || !activeWorkspace) return;
+  workspaceHydrated = true;
+  try {
+    setAccountSyncStatus("Loading account data", "warn");
+    const snapshot = await loadWorkspaceSnapshot(cloudConfig, authSession, activeWorkspace);
+    if (snapshot?.state) {
+      const localHasData = hasMeaningfulSchedulerData(state);
+      if (localHasData) {
+        const loadCloud = await confirmDialog("This account already has saved scheduler data. Load account data on this device? Choose No to keep this device's local data and upload it into the account.", "Load account data", "Keep local data");
+        if (loadCloud) {
+          state = snapshot.state;
+          settings = normalizeSettings(snapshot.settings || settings);
+          await persistWorkspaceSnapshotLocally();
+        } else {
+          await saveAuthenticatedWorkspaceSnapshot();
+        }
+      } else {
+        state = snapshot.state;
+        settings = normalizeSettings(snapshot.settings || settings);
+        await persistWorkspaceSnapshotLocally();
+      }
+      setAccountSyncStatus("Account data loaded", "good");
+      return;
+    }
+
+    if (hasMeaningfulSchedulerData(state)) {
+      const importLocal = await confirmDialog("Import existing local scheduler data into this account?", "Import local data", "Start blank");
+      if (importLocal) {
+        await saveAuthenticatedWorkspaceSnapshot();
+        setAccountSyncStatus("Local data imported", "good");
+      } else {
+        state = defaultAppState();
+        settings = defaultSettings();
+        normalizeLoadedData();
+        await persistWorkspaceSnapshotLocally();
+        await saveAuthenticatedWorkspaceSnapshot();
+        setAccountSyncStatus("Blank account started", "good");
+      }
+    } else {
+      await saveAuthenticatedWorkspaceSnapshot();
+      setAccountSyncStatus("Account ready", "good");
+    }
+  } catch (error) {
+    setAccountSyncStatus("Account sync warning", "warn");
+    console.warn("Workspace data could not be loaded. Local data remains available.", error);
+  }
+}
+
+async function persistWorkspaceSnapshotLocally(): Promise<void> {
+  state = await window.habanerosDesktop.saveState(state);
+  settings = await window.habanerosDesktop.saveSettings(settings);
+  normalizeLoadedData();
+}
+
+function hasMeaningfulSchedulerData(value: AppState): boolean {
+  return value.workers.length > 0 || Boolean(value.schedule) || value.scheduleHistory.length > 0;
+}
+
+function renderAccountSettings(): void {
+  els.accountEmail.value = authSession?.user.email || "Not signed in";
+  els.accountWorkspaceName.value = activeWorkspace?.name || "No workspace";
+  if (authSession && activeWorkspace && els.accountSyncStatus.textContent === "Signed in") setAccountSyncStatus("Signed in", "good");
+}
+
+function setAccountSyncStatus(message: string, level: "good" | "warn" | "bad" = "good"): void {
+  els.accountSyncStatus.textContent = message;
+  els.accountSyncStatus.className = "count-pill status-" + level;
+}
+
+async function importLocalDataIntoAccount(): Promise<void> {
+  if (!authSession || !activeWorkspace) { await showDialogMessage("Log in before importing local data into an account."); return; }
+  if (!await confirmDialog("Import this device's current local scheduler data into the signed-in account? This will replace the account snapshot with this local copy.", "Import local data", "Cancel")) return;
+  try {
+    await saveAuthenticatedWorkspaceSnapshot();
+    setAccountSyncStatus("Local data imported", "good");
+    await showDialogMessage("Local scheduler data imported into this account.");
+  } catch (error) {
+    setAccountSyncStatus("Import failed", "bad");
+    showError("Local data could not be imported into this account.", error);
+  }
+}
+
+async function logoutAccount(): Promise<void> {
+  if (!authSession) return;
+  if (!await confirmDialog("Log out of this account? Local cached data will remain on this device.", "Log Out", "Cancel")) return;
+  await signOut(cloudConfig, authSession);
+  authSession = null;
+  activeWorkspace = null;
+  window.location.reload();
+}
+
 function bindEvents(): void {
+  if (appEventsBound) return;
+  appEventsBound = true;
   els.workerForm.addEventListener("submit", (event) => void addWorker(event));
   els.workerForm.addEventListener("reset", () => queueMicrotask(cleanupAfterDialog));
   els.closeAddWorkerBtn.addEventListener("click", closeAddWorkerModal);
@@ -178,6 +383,8 @@ function bindEvents(): void {
   els.scheduleRulesDetails.addEventListener("toggle", updateScheduleRulesToggleLabel);
   els.checkRemindersBtn.addEventListener("click", () => void checkReminderStatus());
   els.sendTestSmsBtn.addEventListener("click", () => void sendTestSms());
+  els.importLocalAccountBtn.addEventListener("click", () => void importLocalDataIntoAccount());
+  els.logoutBtn.addEventListener("click", () => void logoutAccount());
   els.cloudConfigForm.addEventListener("submit", (event) => void saveCloudConfig(event));
   els.testCloudBtn.addEventListener("click", () => void testCloudConfig());
   els.syncEmployeesBtn.addEventListener("click", () => void syncCloudEmployees());
@@ -253,6 +460,7 @@ function render(): void {
   renderScheduleHistory();
   renderDashboard();
   renderNeedsAttention();
+  renderAccountSettings();
   ensureWorkerFormInteractive();
 }
 
@@ -1312,6 +1520,10 @@ async function invokeReminderFunction(mode: "dryRun" | "test", testPhoneNumber =
 }
 
 async function saveManagerCloudSnapshot(): Promise<void> {
+  if (authSession && activeWorkspace) {
+    await saveAuthenticatedWorkspaceSnapshot();
+    return;
+  }
   const config = readCloudConfigForm();
   if (!config.supabaseUrl || !config.anonKey) return;
   await fetch(config.supabaseUrl + "/rest/v1/rpc/manager_save_app_state", {
@@ -1321,6 +1533,25 @@ async function saveManagerCloudSnapshot(): Promise<void> {
   }).then(async (response) => {
     if (!response.ok) throw new Error((await response.text()) || "Cloud settings snapshot could not be saved.");
   });
+}
+
+function queueAuthenticatedWorkspaceSnapshot(): void {
+  if (!authSession || !activeWorkspace || !cloudConfig.supabaseUrl || !cloudConfig.anonKey) return;
+  setAccountSyncStatus("Saving account data", "warn");
+  workspaceSaveChain = workspaceSaveChain
+    .then(() => saveAuthenticatedWorkspaceSnapshot())
+    .catch((error) => {
+      setAccountSyncStatus("Account save failed", "bad");
+      console.warn("Authenticated workspace snapshot could not be saved.", error);
+    });
+}
+
+async function saveAuthenticatedWorkspaceSnapshot(): Promise<void> {
+  if (!authSession || !activeWorkspace) return;
+  authSession = await refreshAuthSession(cloudConfig, authSession);
+  storeAuthSession(authSession);
+  await saveWorkspaceSnapshot(cloudConfig, authSession, activeWorkspace, { state, settings, cloudConfig });
+  setAccountSyncStatus("Account saved", "good");
 }
 
 function renderReminderFunctionResult(result: Record<string, unknown>): void {
@@ -1340,7 +1571,8 @@ async function updateTheme(): Promise<void> {
   try {
     settings = { ...settings, darkMode: els.darkModeToggle.checked };
     applyTheme(settings);
-    await window.habanerosDesktop.saveSettings(settings);
+    settings = await window.habanerosDesktop.saveSettings(settings);
+    queueAuthenticatedWorkspaceSnapshot();
   } catch (error) {
     showError("Theme preference could not be saved.", error);
   }
@@ -1357,6 +1589,7 @@ async function saveState(): Promise<void> {
     state = await window.habanerosDesktop.saveState(state);
     await window.habanerosDesktop.setDirty(false);
     setSaveStatus("Saved", "good");
+    queueAuthenticatedWorkspaceSnapshot();
   } finally {
     ensureWorkerFormInteractive();
   }

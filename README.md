@@ -23,7 +23,7 @@ npm install
 npm run dev
 ```
 
-The desktop app opens to the manager login screen. Enter the local manager password `92118`. Login lasts for the current app session only.
+The desktop app opens to the account login screen. Enter the Supabase project URL, the public anon/publishable key, your email, and password. The app remembers the Supabase session and loads the signed-in workspace on restart.
 
 ## Local Browser Version
 
@@ -33,7 +33,7 @@ Build and start the manager app in a normal browser with:
 npm run web:dev
 ```
 
-Open `http://127.0.0.1:4173` and enter password `92118`. The browser session remains unlocked until that browser tab/session is closed. To create the browser files without starting the local server, run:
+Open `http://127.0.0.1:4173` and log in with the same Supabase Auth email and password used by the desktop app. To create the browser files without starting the local server, run:
 
 ```bash
 npm run web:build
@@ -41,7 +41,7 @@ npm run web:build
 
 The browser version reuses the desktop renderer and scheduling modules. Its data is stored separately in that browser's local storage, so it does not automatically share the desktop app's JSON file. JSON import/export can be used to move data between them. Browser printing uses the browser print dialog, and browser import/export uses file upload and download instead of Windows file dialogs. Supabase configuration is also stored separately per browser.
 
-The password is intentionally a simple local access screen, not secure online authentication. Because browser code is delivered to the browser, it must not be treated as protection for an internet-hosted manager app. No Supabase service-role key is used or exposed.
+The browser manager app uses only the Supabase URL and public anon/publishable key. No Supabase service-role key is used or exposed in frontend code.
 
 ## Build
 
@@ -95,6 +95,49 @@ Cloud connection settings are stored separately at:
 `%APPDATA%\Habaneros Scheduler\cloud-settings.json`
 
 The desktop app remains fully usable when Supabase is unavailable.
+
+## Supabase Auth Accounts
+
+The manager desktop app and manager web app use Supabase Auth so scheduler data can follow the signed-in user across devices.
+
+### Required Auth Database Update
+
+For an existing connected Supabase project, run this exact file once in Supabase SQL Editor:
+
+`supabase/migrations/1.10.12-auth-workspaces.sql`
+
+This creates:
+
+- `workspaces`
+- `workspace_members`
+- `workspace_app_state`
+- authenticated RPC functions for loading and saving workspace app snapshots
+- Row Level Security policies so authenticated users can only read and write their own workspace
+
+The migration is additive. It does not delete the older `manager_app_state` table or existing employee/submission data.
+
+### Supabase Auth Settings
+
+In Supabase Dashboard:
+
+1. Open **Authentication > Providers**.
+2. Enable **Email**.
+3. For the easiest first setup, temporarily disable **Confirm email** so a new account can log in immediately. If email confirmation remains enabled, the user must confirm their email before the app receives a usable session.
+4. Open **Authentication > URL Configuration**.
+5. Add your manager web URL to allowed redirect URLs when password reset links are used.
+6. Keep service role keys out of the desktop app, manager web app, GitHub Pages, and app settings.
+
+### First Login and Existing Data
+
+On first login, each user gets one default workspace named `Habaneros`.
+
+If the signed-in workspace is empty and this device already has local scheduler data, the app asks:
+
+`Import existing local scheduler data into this account?`
+
+Choose import to upload the current local scheduler data into the logged-in workspace. Choose start blank only if you want that account to begin with a clean scheduler state.
+
+If the account already has cloud data and the device also has local data, the app asks before replacing local data with the account copy.
 
 ## Employee Availability Phone Form
 
