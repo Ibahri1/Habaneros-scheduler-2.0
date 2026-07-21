@@ -1,5 +1,5 @@
 import { rpc } from "./supabase.js";
-import { formatDate, formatWeek, toIsoDate, upcomingSundays } from "./weeks.js";
+import { addDays, formatDate, formatWeek, mondayWeekStart, parseLocalDate, toIsoDate, upcomingSundays } from "./weeks.js";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const LANGUAGE_KEY = "habaneros-availability-language";
@@ -307,27 +307,14 @@ function renderPostedShift(shift, label) {
 }
 
 function scheduleWeeks(today = new Date()) {
-  const current = currentMonday(today);
+  const current = parseLocalDate(mondayWeekStart(today));
+  const last = addDays(current, -7);
+  const next = addDays(current, 7);
   return [
-    { label: "lastWeek", date: addDays(current, -7), value: toIsoDate(addDays(current, -7)) },
+    { label: "lastWeek", date: last, value: toIsoDate(last) },
     { label: "currentWeek", date: current, value: toIsoDate(current) },
-    { label: "nextWeek", date: addDays(current, 7), value: toIsoDate(addDays(current, 7)) }
+    { label: "nextWeek", date: next, value: toIsoDate(next) }
   ];
-}
-
-function currentMonday(today) {
-  const date = new Date(today);
-  date.setHours(12, 0, 0, 0);
-  const day = date.getDay();
-  const offset = day === 0 ? -6 : 1 - day;
-  date.setDate(date.getDate() + offset);
-  return date;
-}
-
-function addDays(date, days) {
-  const result = new Date(date);
-  result.setDate(result.getDate() + days);
-  return result;
 }
 
 function escapeHtml(value) {

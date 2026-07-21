@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.10.16 - 2026-07-21
+
+- Fixed schedule week-start normalization so selected dates map to the Monday of that schedule week.
+- Updated shared date helpers to parse `YYYY-MM-DD` values with local date logic and return date-only ISO strings.
+- Updated generated schedule dates, published schedule push/clear actions, schedule history modifications, and employee View Schedule week choices to use the same Monday week-start behavior.
+
 ## 1.10.15 - 2026-07-21
 
 - Added a follow-up Supabase migration that fixes ambiguous `workspace_id` references in published schedule RPCs and policies.

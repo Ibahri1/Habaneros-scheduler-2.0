@@ -1,7 +1,7 @@
 import "./browserBridge";
 import { defaultAppState, defaultSettings, defaultWorkerShiftTimes, normalizeWorker } from "../shared/defaults";
 import { DAYS, SHORT_DAYS, AvailabilitySubmission, CloudConfig, DayName, AppSettings, AppState, ExportFormat, ImportResult, PublishedScheduleSummary, ScheduleHistoryEntry, ShiftAvailability, ShiftAvailabilityMap, ShiftName, ShiftSchedule, SubmissionStatus, Worker, WorkerRole } from "../shared/types";
-import { addDays, formatDate, formatDuration, formatTime, nextMonday } from "../shared/time";
+import { addDays, formatDate, formatDuration, formatTime, mondayWeekStart, nextMonday } from "../shared/time";
 import { buildReminderMessage, calculateAvailabilityStatus, formatDeadlineSummary, normalizeSettings } from "../shared/availabilityDeadline";
 import { createWorker } from "./modules/employees/employees";
 import { toggleAvailability } from "./modules/availability/availability";
@@ -269,6 +269,7 @@ async function init(): Promise<void> {
 
 function normalizeLoadedData(): void {
   if (!state.rules.weekStart) state.rules.weekStart = nextMonday();
+  else state.rules.weekStart = mondayWeekStart(state.rules.weekStart);
   state.workers = state.workers.map((worker) => normalizeWorker(worker, state.rules));
   settings = normalizeSettings(settings);
   normalizeSchedule(state.schedule, state.rules.mealBreakHours);
@@ -898,7 +899,8 @@ function findWorker(id: string): Worker | undefined { return state.workers.find(
 async function rulesChanged(): Promise<void> { syncRulesFromInputs(); state.schedule = null; await saveStateAndRender(); }
 
 function syncRulesFromInputs(): void {
-  state.rules.weekStart = els.weekStart.value || nextMonday();
+  state.rules.weekStart = mondayWeekStart(els.weekStart.value || nextMonday());
+  els.weekStart.value = state.rules.weekStart;
   state.rules.openShift = els.openShift.value || "08:00";
   state.rules.closeShift = els.closeShift.value || "16:00";
   state.rules.shiftHours = Number(els.shiftHours.value) || 8;
@@ -1056,6 +1058,7 @@ function printDayWarnings(day: NonNullable<AppState["schedule"]>["days"][number]
 
 function createHistoryEntry(name: string, weekStart: string, schedule: NonNullable<AppState["schedule"]>): ScheduleHistoryEntry {
   const createdAt = new Date().toISOString();
+  weekStart = mondayWeekStart(weekStart);
   return { id: createId(), name: name.trim() || "Week of " + formatWeek(weekStart), weekStart, schedule: structuredClone(schedule), createdAt };
 }
 
@@ -1097,7 +1100,7 @@ async function handleScheduleHistoryAction(button: HTMLButtonElement): Promise<v
     return;
   }
   state.schedule = structuredClone(entry.schedule);
-  state.rules.weekStart = entry.weekStart;
+  state.rules.weekStart = mondayWeekStart(entry.weekStart);
   normalizeSchedule(state.schedule, state.rules.mealBreakHours);
   if (action === "modify") {
     historyEditSourceId = entry.id;
@@ -1155,7 +1158,8 @@ async function pushScheduleToEmployeeDomain(): Promise<void> {
   if (!state.schedule) { await showDialogMessage("Generate a schedule before pushing it to the employee website."); return; }
   try {
     const { session, workspace } = await requirePublishedScheduleAccount();
-    await publishScheduleToEmployeeDomain(cloudConfig, session, workspace.id, state.rules.weekStart, state.schedule);
+    const weekStart = mondayWeekStart(state.rules.weekStart);
+    await publishScheduleToEmployeeDomain(cloudConfig, session, workspace.id, weekStart, state.schedule);
     await refreshPublishedSchedules(false);
     showToast("Schedule pushed to employee website.", "good", 9000);
   } catch (error) {
@@ -1193,11 +1197,12 @@ function renderPublishedSchedules(message = ""): void {
 }
 
 async function clearRelativePublishedSchedule(dayOffset: number): Promise<void> {
-  await clearEmployeeDomainSchedule(addDays(state.rules.weekStart || nextMonday(), dayOffset));
+  await clearEmployeeDomainSchedule(addDays(mondayWeekStart(state.rules.weekStart || nextMonday()), dayOffset));
 }
 
 async function clearEmployeeDomainSchedule(weekStart: string): Promise<void> {
   if (!weekStart) return;
+  weekStart = mondayWeekStart(weekStart);
   if (!await confirmDialog("Are you sure you want to remove this schedule from the employee website?")) return;
   try {
     const { session, workspace } = await requirePublishedScheduleAccount();
@@ -1236,7 +1241,7 @@ async function saveHistoryModifications(): Promise<void> {
   if (!historyEditSourceId || !state.schedule) return;
   const source = state.scheduleHistory.find((entry) => entry.id === historyEditSourceId);
   if (!source) return;
-  const weekStart = els.historyEditWeek.value || source.weekStart;
+  const weekStart = mondayWeekStart(els.historyEditWeek.value || source.weekStart);
   const schedule = structuredClone(state.schedule);
   schedule.days.forEach((day, index) => { day.date = addDays(weekStart, index); });
   state.scheduleHistory.unshift(createHistoryEntry(els.historyEditName.value || source.name + " - Modified", weekStart, schedule));

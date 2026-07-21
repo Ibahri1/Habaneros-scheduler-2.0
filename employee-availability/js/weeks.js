@@ -18,5 +18,31 @@ export function formatDate(date, locale) {
 }
 
 export function formatWeek(value, locale) {
-  return formatDate(new Date(value + "T12:00:00"), locale);
+  return formatDate(parseLocalDate(value), locale);
+}
+
+export function parseLocalDate(value) {
+  if (value instanceof Date) {
+    const date = new Date(value);
+    date.setHours(12, 0, 0, 0);
+    return date;
+  }
+  const [year, month, day] = String(value || "").slice(0, 10).split("-").map(Number);
+  const date = year && month && day ? new Date(year, month - 1, day) : new Date();
+  date.setHours(12, 0, 0, 0);
+  return date;
+}
+
+export function mondayWeekStart(value) {
+  const date = parseLocalDate(value);
+  const day = date.getDay();
+  const offset = day === 0 ? -6 : 1 - day;
+  date.setDate(date.getDate() + offset);
+  return toIsoDate(date);
+}
+
+export function addDays(value, days) {
+  const date = parseLocalDate(value);
+  date.setDate(date.getDate() + days);
+  return date;
 }

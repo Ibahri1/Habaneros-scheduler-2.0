@@ -28,18 +28,40 @@ export function formatDuration(hours: number): string {
   if (!minutes) return whole + " hr" + (whole === 1 ? "" : "s");
   return whole + " hr " + minutes + " min";
 }
+export function parseLocalDate(value: string | Date): Date {
+  if (value instanceof Date) {
+    const date = new Date(value);
+    date.setHours(12, 0, 0, 0);
+    return date;
+  }
+  const [year, month, day] = String(value || "").slice(0, 10).split("-").map(Number);
+  const date = year && month && day ? new Date(year, month - 1, day) : new Date();
+  date.setHours(12, 0, 0, 0);
+  return date;
+}
+export function toIsoDate(date: Date): string {
+  return date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0");
+}
+export function mondayWeekStart(value: string | Date): string {
+  const date = parseLocalDate(value);
+  const day = date.getDay();
+  const offset = day === 0 ? -6 : 1 - day;
+  date.setDate(date.getDate() + offset);
+  return toIsoDate(date);
+}
 export function nextMonday(): string {
   const date = new Date();
   const day = date.getDay();
   const distance = (8 - day) % 7 || 7;
   date.setDate(date.getDate() + distance);
-  return date.toISOString().slice(0, 10);
+  date.setHours(12, 0, 0, 0);
+  return toIsoDate(date);
 }
 export function addDays(dateString: string, days: number): string {
-  const date = new Date(dateString + "T12:00:00");
+  const date = parseLocalDate(dateString);
   date.setDate(date.getDate() + days);
-  return date.toISOString();
+  return toIsoDate(date);
 }
 export function formatDate(dateString: string): string {
-  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(dateString));
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(parseLocalDate(dateString));
 }
