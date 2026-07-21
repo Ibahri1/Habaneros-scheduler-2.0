@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.10.15 - 2026-07-21
+
+- Added a follow-up Supabase migration that fixes ambiguous `workspace_id` references in published schedule RPCs and policies.
+- Updated the published schedule upsert to use the unique constraint directly so pushing a schedule replaces the existing week cleanly.
+
 ## 1.10.14 - 2026-07-21
 
 - Added a Push to Employee Domain action for publishing the current generated schedule to Supabase.
