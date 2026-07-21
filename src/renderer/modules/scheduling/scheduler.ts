@@ -1,5 +1,5 @@
-import { addDays, formatTime, getShiftDurationHours } from "../../../shared/time";
-import { AppState, AssignedWorker, DayName, GeneratedSchedule, ShiftName, ShiftSchedule, Worker } from "../../../shared/types";
+import { formatTime, getDateForWeekDay, getShiftDurationHours, mondayWeekStart } from "../../../shared/time";
+import { AppState, AssignedWorker, DayName, GeneratedSchedule, ShiftName, ShiftSchedule, WEEK_DAYS, Worker } from "../../../shared/types";
 import { createId } from "../../shared/ids";
 
 interface AssignmentStats { hours: Record<string, number>; days: Record<string, number>; }
@@ -98,7 +98,9 @@ export function generateSchedule(state: AppState): GeneratedSchedule {
   const warningsByDay = new Map<DayName, string[]>();
   const contexts: ShiftContext[] = [];
 
-  (Object.keys(state.rules.staffing) as DayName[]).forEach((day) => {
+  const weekStart = mondayWeekStart(state.rules.weekStart);
+
+  WEEK_DAYS.forEach((day) => {
     const assignedToday = new Set<string>();
     const warnings: string[] = [];
     warningsByDay.set(day, warnings);
@@ -133,14 +135,14 @@ export function generateSchedule(state: AppState): GeneratedSchedule {
     if (context.assigned.length < context.needed) context.warnings.push(explainNoCandidates(context, state.workers, stats) + " " + context.assigned.length + " of " + context.needed + " filled.");
   });
 
-  const days = (Object.keys(state.rules.staffing) as DayName[]).map((day, index) => {
+  const days = WEEK_DAYS.map((day) => {
     const shifts = {} as Record<ShiftName, ShiftSchedule>;
     (["open", "close"] as ShiftName[]).forEach((shiftName) => {
       const context = contexts.find((item) => item.day === day && item.shiftName === shiftName)!;
       const hasLead = context.assigned.some((worker) => worker.isManager);
       shifts[shiftName] = { name: shiftName, needed: context.needed, time: shiftName === "open" ? state.rules.openShift : state.rules.closeShift, assigned: context.assigned.map((worker) => toAssignedWorker(worker, shiftName, state.rules.mealBreakHours)), hasQualified: hasLead, hasManager: hasLead };
     });
-    return { day, date: addDays(state.rules.weekStart, index), shifts, warnings: warningsByDay.get(day)! };
+    return { day, date: getDateForWeekDay(weekStart, day), shifts, warnings: warningsByDay.get(day)! };
   });
   return { createdAt: new Date().toISOString(), days };
 }

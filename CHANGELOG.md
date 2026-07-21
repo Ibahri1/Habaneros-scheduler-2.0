@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.10.17 - 2026-07-21
+
+- Fixed generated schedule day ordering by replacing staffing object-key iteration with the canonical Monday-through-Sunday order.
+- Fixed day/date pairing so each day label uses the date from the same canonical week index.
+- Normalized schedule rendering, printing, history snapshots, published schedule snapshots, and employee website schedule viewing to display Monday through Sunday consistently.
+
 ## 1.10.16 - 2026-07-21
 
 - Fixed schedule week-start normalization so selected dates map to the Monday of that schedule week.

@@ -298,7 +298,8 @@ async function loadPublishedSchedule() {
 }
 
 function renderPostedSchedule(schedule, week) {
-  postedSchedule.innerHTML = '<div class="posted-week"><strong>' + t("weekOfSchedule") + " " + formatWeek(week, currentLocale()) + '</strong></div>' + (schedule.days || []).map((day) => '<article class="posted-day"><h2>' + escapeHtml(tDay(day.day) || day.day) + '</h2><p>' + escapeHtml(formatWeek(day.date, currentLocale())) + '</p>' + renderPostedShift(day.shifts?.open, t("openShift")) + renderPostedShift(day.shifts?.close, t("closeShift")) + '</article>').join("");
+  const days = orderedPostedScheduleDays(schedule, week);
+  postedSchedule.innerHTML = '<div class="posted-week"><strong>' + t("weekOfSchedule") + " " + formatWeek(mondayWeekStart(week), currentLocale()) + '</strong></div>' + days.map((day) => '<article class="posted-day"><h2>' + escapeHtml(tDay(day.day) || day.day) + '</h2><p>' + escapeHtml(formatWeek(day.date, currentLocale())) + '</p>' + renderPostedShift(day.shifts?.open, t("openShift")) + renderPostedShift(day.shifts?.close, t("closeShift")) + '</article>').join("");
 }
 
 function renderPostedShift(shift, label) {
@@ -315,6 +316,14 @@ function scheduleWeeks(today = new Date()) {
     { label: "currentWeek", date: current, value: toIsoDate(current) },
     { label: "nextWeek", date: next, value: toIsoDate(next) }
   ];
+}
+
+function orderedPostedScheduleDays(schedule, week) {
+  const weekStart = mondayWeekStart(week);
+  return DAYS.map((day, index) => {
+    const existing = (schedule.days || []).find((item) => item.day === day) || { day, shifts: { open: { assigned: [] }, close: { assigned: [] } } };
+    return { ...existing, day, date: toIsoDate(addDays(parseLocalDate(weekStart), index)) };
+  });
 }
 
 function escapeHtml(value) {

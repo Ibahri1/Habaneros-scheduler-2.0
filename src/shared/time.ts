@@ -1,3 +1,5 @@
+import { DAYS, DayName } from "./types";
+
 export function timeToMinutes(value: string): number {
   const [hourText, minuteText] = String(value || "00:00").split(":");
   return (Number(hourText) || 0) * 60 + (Number(minuteText) || 0);
@@ -61,6 +63,10 @@ export function addDays(dateString: string, days: number): string {
   const date = parseLocalDate(dateString);
   date.setDate(date.getDate() + days);
   return toIsoDate(date);
+}
+export function getDateForWeekDay(weekStart: string, dayName: DayName): string {
+  const index = DAYS.indexOf(dayName);
+  return addDays(mondayWeekStart(weekStart), index >= 0 ? index : 0);
 }
 export function formatDate(dateString: string): string {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(parseLocalDate(dateString));

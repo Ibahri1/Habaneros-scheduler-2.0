@@ -1,7 +1,7 @@
 import "./browserBridge";
 import { defaultAppState, defaultSettings, defaultWorkerShiftTimes, normalizeWorker } from "../shared/defaults";
-import { DAYS, SHORT_DAYS, AvailabilitySubmission, CloudConfig, DayName, AppSettings, AppState, ExportFormat, ImportResult, PublishedScheduleSummary, ScheduleHistoryEntry, ShiftAvailability, ShiftAvailabilityMap, ShiftName, ShiftSchedule, SubmissionStatus, Worker, WorkerRole } from "../shared/types";
-import { addDays, formatDate, formatDuration, formatTime, mondayWeekStart, nextMonday } from "../shared/time";
+import { DAYS, SHORT_DAYS, AvailabilitySubmission, CloudConfig, DayName, AppSettings, AppState, DaySchedule, ExportFormat, ImportResult, PublishedScheduleSummary, ScheduleHistoryEntry, ShiftAvailability, ShiftAvailabilityMap, ShiftName, ShiftSchedule, SubmissionStatus, WEEK_DAYS, Worker, WorkerRole } from "../shared/types";
+import { addDays, formatDate, formatDuration, formatTime, getDateForWeekDay, mondayWeekStart, nextMonday, parseLocalDate } from "../shared/time";
 import { buildReminderMessage, calculateAvailabilityStatus, formatDeadlineSummary, normalizeSettings } from "../shared/availabilityDeadline";
 import { createWorker } from "./modules/employees/employees";
 import { toggleAvailability } from "./modules/availability/availability";
@@ -517,7 +517,7 @@ function renderNeedsAttention(): void {
   if (availabilityStatus.missing) items.push({ level: "bad", text: availabilityStatus.missing + " employee" + (availabilityStatus.missing === 1 ? "" : "s") + " missing availability after the " + formatDeadlineSummary(settings) + " deadline." });
   else if (availabilityStatus.waiting) items.push({ level: "warn", text: availabilityStatus.waiting + " employee" + (availabilityStatus.waiting === 1 ? "" : "s") + " still waiting to submit availability before the " + formatDeadlineSummary(settings) + " deadline." });
   if (state.schedule) {
-    for (const day of state.schedule.days) {
+    for (const day of orderedScheduleDays(state.schedule, state.rules.weekStart)) {
       const dayWarnings = [...new Set(day.warnings)];
       dayWarnings.filter(isMustFixWarning).forEach((warning) => items.push({ level: "bad", text: warning }));
       dayWarnings.filter((warning) => !isMustFixWarning(warning)).forEach((warning) => items.push({ level: "warn", text: warning }));
@@ -935,7 +935,7 @@ function renderSchedule(): void {
   els.pushScheduleBtn.disabled = false;
   const warningCount = countScheduleWarnings(state);
   els.scheduleStatus.textContent = warningCount ? warningCount + " warning" + (warningCount === 1 ? "" : "s") : "Ready";
-  els.scheduleOutput.innerHTML = state.schedule.days.map((day) => '<article class="schedule-day"><div class="schedule-day-head"><div><strong>' + day.day + '</strong><div class="small-muted">' + formatDate(day.date) + '</div></div>' + (day.warnings.length ? '<span class="tag bad">' + day.warnings.length + ' issue' + (day.warnings.length === 1 ? '' : 's') + '</span>' : '<span class="tag good">Covered</span>') + '</div><div class="shift-list">' + renderShift(day.day, day.shifts.open, "Opening") + renderShift(day.day, day.shifts.close, "Closing") + '</div>' + (day.warnings.length ? '<div class="warnings">' + day.warnings.map((warning) => '<div class="warning ' + warningClass(warning) + '">' + escapeHtml(warning) + '</div>').join("") + '</div>' : '') + '</article>').join("");
+  els.scheduleOutput.innerHTML = orderedScheduleDays(state.schedule, state.rules.weekStart).map((day) => '<article class="schedule-day"><div class="schedule-day-head"><div><strong>' + day.day + '</strong><div class="small-muted">' + formatDate(day.date) + '</div></div>' + (day.warnings.length ? '<span class="tag bad">' + day.warnings.length + ' issue' + (day.warnings.length === 1 ? '' : 's') + '</span>' : '<span class="tag good">Covered</span>') + '</div><div class="shift-list">' + renderShift(day.day, day.shifts.open, "Opening") + renderShift(day.day, day.shifts.close, "Closing") + '</div>' + (day.warnings.length ? '<div class="warnings">' + day.warnings.map((warning) => '<div class="warning ' + warningClass(warning) + '">' + escapeHtml(warning) + '</div>').join("") + '</div>' : '') + '</article>').join("");
   bindScheduleEditorEvents();
 }
 
@@ -1037,9 +1037,10 @@ async function printSchedule(): Promise<void> {
 }
 
 function buildPrintHtml(schedule: NonNullable<AppState["schedule"]>, weekStart: string, title: string): string {
-  const compact = schedule.days.every((day) => day.shifts.open.assigned.length <= 4 && day.shifts.close.assigned.length <= 4);
+  const days = orderedScheduleDays(schedule, weekStart);
+  const compact = days.every((day) => day.shifts.open.assigned.length <= 4 && day.shifts.close.assigned.length <= 4);
   const css = '@page{size:landscape;margin:.2in}*{box-sizing:border-box}body{font-family:Segoe UI,Arial,sans-serif;color:#182018;margin:0;font-size:9.2pt;line-height:1.12}.print-header{display:flex;align-items:end;justify-content:space-between;border-bottom:2px solid #246b46;padding:0 0 4px;margin:0 0 5px}.print-header h1{font-size:15pt;margin:0}.week{font-size:9pt;font-weight:700;color:#4d5a4e}.week-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;align-items:start}.week-grid.expanded{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.day{border:1px solid #aeb9ac;break-inside:avoid;page-break-inside:avoid;min-width:0}.day-head{background:#e9f1e8;border-bottom:1px solid #aeb9ac;padding:4px 5px;font-size:9.5pt;font-weight:800}.day-date{display:block;color:#536154;font-size:7.5pt;font-weight:600}.shift{padding:3px 5px;break-inside:avoid;page-break-inside:avoid}.shift+.shift{border-top:1px solid #cbd3c9}.shift-head{display:flex;justify-content:space-between;gap:4px;margin-bottom:2px;font-size:8.5pt}.shift-time{color:#59665a;white-space:nowrap}.person{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px;border-top:1px dotted #d4dbd2;padding:2px 0;break-inside:avoid;page-break-inside:avoid;font-size:8pt}.person-name{font-weight:700;overflow-wrap:anywhere}.person-time{white-space:nowrap}.empty{color:#697369;font-style:italic;padding:2px 0;font-size:8pt}.day-warnings{border-top:1px solid #d8dfd5;padding:3px 5px;display:grid;gap:1px}.warning{color:#7d301b;font-size:7.5pt;font-weight:700;break-inside:avoid;page-break-inside:avoid}@media print{html,body{width:100%;height:auto}.day,.shift,.person,.warning{break-inside:avoid;page-break-inside:avoid}}';
-  return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + escapeHtml(title) + '</title><style>' + css + '</style></head><body><header class="print-header"><h1>' + escapeHtml(title) + '</h1><div class="week">Week of ' + escapeHtml(weekStart) + '</div></header><main class="week-grid ' + (compact ? 'compact' : 'expanded') + '">' + schedule.days.map((day) => '<section class="day"><div class="day-head">' + day.day + '<span class="day-date">' + formatDate(day.date) + '</span></div>' + printShift(day.shifts.open, 'Opening') + printShift(day.shifts.close, 'Closing') + printDayWarnings(day) + '</section>').join('') + '</main></body></html>';
+  return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + escapeHtml(title) + '</title><style>' + css + '</style></head><body><header class="print-header"><h1>' + escapeHtml(title) + '</h1><div class="week">Week of ' + escapeHtml(mondayWeekStart(weekStart)) + '</div></header><main class="week-grid ' + (compact ? 'compact' : 'expanded') + '">' + days.map((day) => '<section class="day"><div class="day-head">' + day.day + '<span class="day-date">' + formatDate(day.date) + '</span></div>' + printShift(day.shifts.open, 'Opening') + printShift(day.shifts.close, 'Closing') + printDayWarnings(day) + '</section>').join('') + '</main></body></html>';
 }
 
 function printShift(shift: ShiftSchedule, label: string): string {
@@ -1056,10 +1057,24 @@ function printDayWarnings(day: NonNullable<AppState["schedule"]>["days"][number]
   return lines.length ? '<div class="day-warnings">' + lines.map((line) => '<div class="warning">' + line + '</div>').join("") + '</div>' : "";
 }
 
+function orderedScheduleDays(schedule: NonNullable<AppState["schedule"]>, weekStart: string): DaySchedule[] {
+  const normalizedWeekStart = mondayWeekStart(weekStart);
+  return WEEK_DAYS.map((day) => {
+    const existing = schedule.days.find((item) => item.day === day);
+    if (existing) return { ...existing, day, date: getDateForWeekDay(normalizedWeekStart, day), warnings: [...existing.warnings] };
+    const emptyShift = (shift: ShiftName): ShiftSchedule => ({ name: shift, needed: 0, time: shift === "open" ? state.rules.openShift : state.rules.closeShift, assigned: [], hasQualified: false, hasManager: false });
+    return { day, date: getDateForWeekDay(normalizedWeekStart, day), shifts: { open: emptyShift("open"), close: emptyShift("close") }, warnings: [] };
+  });
+}
+
+function normalizedScheduleSnapshot(schedule: NonNullable<AppState["schedule"]>, weekStart: string): NonNullable<AppState["schedule"]> {
+  return { ...structuredClone(schedule), days: orderedScheduleDays(schedule, weekStart) };
+}
+
 function createHistoryEntry(name: string, weekStart: string, schedule: NonNullable<AppState["schedule"]>): ScheduleHistoryEntry {
   const createdAt = new Date().toISOString();
   weekStart = mondayWeekStart(weekStart);
-  return { id: createId(), name: name.trim() || "Week of " + formatWeek(weekStart), weekStart, schedule: structuredClone(schedule), createdAt };
+  return { id: createId(), name: name.trim() || "Week of " + formatWeek(weekStart), weekStart, schedule: normalizedScheduleSnapshot(schedule, weekStart), createdAt };
 }
 
 function renderScheduleHistory(): void {
@@ -1159,7 +1174,7 @@ async function pushScheduleToEmployeeDomain(): Promise<void> {
   try {
     const { session, workspace } = await requirePublishedScheduleAccount();
     const weekStart = mondayWeekStart(state.rules.weekStart);
-    await publishScheduleToEmployeeDomain(cloudConfig, session, workspace.id, weekStart, state.schedule);
+    await publishScheduleToEmployeeDomain(cloudConfig, session, workspace.id, weekStart, normalizedScheduleSnapshot(state.schedule, weekStart));
     await refreshPublishedSchedules(false);
     showToast("Schedule pushed to employee website.", "good", 9000);
   } catch (error) {
@@ -1242,8 +1257,7 @@ async function saveHistoryModifications(): Promise<void> {
   const source = state.scheduleHistory.find((entry) => entry.id === historyEditSourceId);
   if (!source) return;
   const weekStart = mondayWeekStart(els.historyEditWeek.value || source.weekStart);
-  const schedule = structuredClone(state.schedule);
-  schedule.days.forEach((day, index) => { day.date = addDays(weekStart, index); });
+  const schedule = normalizedScheduleSnapshot(state.schedule, weekStart);
   state.scheduleHistory.unshift(createHistoryEntry(els.historyEditName.value || source.name + " - Modified", weekStart, schedule));
   historyEditSourceId = null;
   els.scheduleHistoryEditor.hidden = true;
@@ -1521,7 +1535,7 @@ function formatSubmittedAt(value: string): string {
 }
 
 function formatWeek(value: string): string {
-  const date = new Date(value + "T12:00:00");
+  const date = parseLocalDate(value);
   return Number.isNaN(date.getTime()) ? escapeHtml(value) : date.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
 }
 
