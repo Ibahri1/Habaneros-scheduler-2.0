@@ -1,5 +1,5 @@
 import { rpc } from "./supabase.js";
-import { addDays, formatDate, formatWeek, mondayWeekStart, parseLocalDate, toIsoDate, upcomingSundays } from "./weeks.js";
+import { addDays, followingMondayWeekStart, formatDate, formatWeek, mondayWeekStart, parseLocalDate, toIsoDate } from "./weeks.js";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const LANGUAGE_KEY = "habaneros-availability-language";
@@ -23,7 +23,7 @@ const TRANSLATIONS = {
     continue: "Continue",
     welcome: "Welcome",
     weekOf: "Week of",
-    selectWeek: "Select a week",
+    submittingFor: "Submitting availability for:",
     daysAvailable: "Days you are available",
     chooseAvailability: "Choose availability",
     submitAvailability: "Submit Availability",
@@ -83,7 +83,7 @@ const TRANSLATIONS = {
     continue: "Continuar",
     welcome: "Bienvenido",
     weekOf: "Semana de",
-    selectWeek: "Selecciona una semana",
+    submittingFor: "Enviando disponibilidad para:",
     daysAvailable: "Días que estás disponible",
     chooseAvailability: "Selecciona tu disponibilidad",
     submitAvailability: "Enviar Disponibilidad",
@@ -133,6 +133,7 @@ const successPanel = document.getElementById("successPanel");
 const schedulePanel = document.getElementById("schedulePanel");
 const codeInput = document.getElementById("employeeCode");
 const weekStart = document.getElementById("weekStart");
+const weekStartLabel = document.getElementById("weekStartLabel");
 const scheduleWeek = document.getElementById("scheduleWeek");
 const postedSchedule = document.getElementById("postedSchedule");
 const message = document.getElementById("message");
@@ -187,7 +188,7 @@ availabilityForm.addEventListener("submit", async (event) => {
 document.getElementById("startOver").addEventListener("click", resetLogin);
 document.getElementById("submitAnother").addEventListener("click", () => {
   availabilityForm.reset();
-  populateWeeks();
+  setAvailabilityWeek();
   showPanel(availabilityPanel);
   showMessage("");
 });
@@ -202,14 +203,16 @@ function resetLogin() {
   verifiedCode = "";
   codeInput.value = "";
   availabilityForm.reset();
-  populateWeeks();
+  setAvailabilityWeek();
   showPanel(loginPanel);
   showMessage("");
   codeInput.focus();
 }
 
-function populateWeeks() {
-  weekStart.innerHTML = '<option value="">' + t("selectWeek") + '</option>' + upcomingSundays().map((date) => '<option value="' + toIsoDate(date) + '">' + t("weekOf") + " " + formatDate(date, currentLocale()) + '</option>').join("");
+function setAvailabilityWeek() {
+  const targetWeek = followingMondayWeekStart();
+  weekStart.value = targetWeek;
+  weekStartLabel.textContent = t("weekOf") + " " + formatWeek(targetWeek, currentLocale());
 }
 
 function populateScheduleWeeks() {
@@ -230,7 +233,7 @@ function renderLanguage() {
     button.setAttribute("aria-pressed", String(active));
   });
   renderDays(selectedValues);
-  populateWeeks();
+  setAvailabilityWeek();
   populateScheduleWeeks();
   if (activeSiteSection === "schedule") loadPublishedSchedule();
 }

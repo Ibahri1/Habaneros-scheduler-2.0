@@ -6,6 +6,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src https://*.supabase.co; object-src 'none'; base-uri 'none'; form-action 'self'">
   <title>Habaneros Availability</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="submission-week.css">
 </head>
 <body>
   <main>
@@ -32,8 +33,8 @@
     <section id="availabilityPanel" data-availability-section hidden>
       <div class="welcome"><span data-i18n="welcome">Welcome</span>, <strong id="employeeName"></strong></div>
       <form id="availabilityForm">
-        <label for="weekStart" data-i18n="weekOf">Week of</label>
-        <select id="weekStart" required></select>
+        <div class="submission-week"><span data-i18n="submittingFor">Submitting availability for:</span> <strong id="weekStartLabel"></strong></div>
+        <input id="weekStart" type="hidden" required>
         <fieldset><legend data-i18n="daysAvailable">Days you are available</legend><div id="days" class="days"></div></fieldset>
         <button type="submit" data-i18n="submitAvailability">Submit Availability</button>
         <button id="startOver" class="secondary" type="button" data-i18n="useDifferentCode">Use a different code</button>

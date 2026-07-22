@@ -1,0 +1,27 @@
+.submission-week {
+  padding: 12px;
+  border: 1px solid #d6ded3;
+  border-radius: 8px;
+  background: #eef3eb;
+  color: #263427;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.submission-week strong {
+  display: block;
+  margin-top: 3px;
+  color: #1d241e;
+}
+
+@media (prefers-color-scheme: dark) {
+  .submission-week {
+    background: #1f2a20;
+    border-color: #445244;
+    color: #e7f0e4;
+  }
+
+  .submission-week strong {
+    color: #ffffff;
+  }
+}
