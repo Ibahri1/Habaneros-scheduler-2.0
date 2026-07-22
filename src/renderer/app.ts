@@ -1,6 +1,6 @@
 import "./browserBridge";
-import { defaultAppState, defaultSettings, defaultWorkerShiftTimes, normalizeWorker } from "../shared/defaults";
-import { DAYS, SHORT_DAYS, AvailabilitySubmission, CloudConfig, DayName, AppSettings, AppState, DaySchedule, ExportFormat, ImportResult, PublishedScheduleSummary, ScheduleHistoryEntry, ShiftAvailability, ShiftAvailabilityMap, ShiftName, ShiftSchedule, SubmissionStatus, WEEK_DAYS, Worker, WorkerRole } from "../shared/types";
+import { defaultAppState, defaultSettings, defaultWorkerShiftTimes, normalizePreferredSettings, normalizeWorker } from "../shared/defaults";
+import { DAYS, SHORT_DAYS, AvailabilitySubmission, CloudConfig, DayName, AppSettings, AppState, DaySchedule, ExportFormat, ImportResult, PreferredSettings, PublishedScheduleSummary, ScheduleHistoryEntry, ShiftAvailability, ShiftAvailabilityMap, ShiftName, ShiftSchedule, SubmissionStatus, WEEK_DAYS, Worker, WorkerRole } from "../shared/types";
 import { addDays, formatDate, formatDuration, formatTime, getDateForWeekDay, mondayWeekStart, nextMonday, parseLocalDate } from "../shared/time";
 import { buildReminderMessage, calculateAvailabilityStatus, formatDeadlineSummary, normalizeSettings } from "../shared/availabilityDeadline";
 import { createWorker } from "./modules/employees/employees";
@@ -45,6 +45,8 @@ const els = {
   createAccountBtn: byId<HTMLButtonElement>("createAccountBtn"),
   forgotPasswordBtn: byId<HTMLButtonElement>("forgotPasswordBtn"),
   saveStatus: byId<HTMLSpanElement>("saveStatus"),
+  loadPreferredSettingsBtn: byId<HTMLButtonElement>("loadPreferredSettingsBtn"),
+  editPreferredSettingsBtn: byId<HTMLButtonElement>("editPreferredSettingsBtn"),
   dashboardEmployees: byId<HTMLSpanElement>("dashboardEmployees"),
   dashboardSubmissions: byId<HTMLSpanElement>("dashboardSubmissions"),
   dashboardAvailabilityStatus: byId<HTMLSpanElement>("dashboardAvailabilityStatus"),
@@ -146,6 +148,8 @@ const els = {
 };
 
 const workerIdentityFields = [els.workerName, els.employeeCode, els.workerPosition];
+const ADMIN_ACTION_PASSWORD = "92118";
+const PREFERRED_STAFFING_DAYS: DayName[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
 void boot();
 
@@ -384,6 +388,8 @@ function bindEvents(): void {
   els.generateBtn.addEventListener("click", () => void generateAndSaveSchedule());
   els.printBtn.addEventListener("click", () => void printSchedule());
   els.pushScheduleBtn.addEventListener("click", () => void pushScheduleToEmployeeDomain());
+  els.loadPreferredSettingsBtn.addEventListener("click", () => void loadPreferredSettings());
+  els.editPreferredSettingsBtn.addEventListener("click", () => openPreferredSettingsEditor());
   els.dashboardPrintBtn.addEventListener("click", () => void printSchedule());
   els.importBtn.addEventListener("click", () => void importData());
   els.exportJsonBtn.addEventListener("click", () => void exportData("json"));
@@ -1171,6 +1177,7 @@ async function saveCurrentScheduleToHistory(): Promise<void> {
 
 async function pushScheduleToEmployeeDomain(): Promise<void> {
   if (!state.schedule) { await showDialogMessage("Generate a schedule before pushing it to the employee website."); return; }
+  if (!await requireAdminActionPassword("Push to Employee Domain")) return;
   try {
     const { session, workspace } = await requirePublishedScheduleAccount();
     const weekStart = mondayWeekStart(state.rules.weekStart);
@@ -1218,6 +1225,7 @@ async function clearRelativePublishedSchedule(dayOffset: number): Promise<void> 
 async function clearEmployeeDomainSchedule(weekStart: string): Promise<void> {
   if (!weekStart) return;
   weekStart = mondayWeekStart(weekStart);
+  if (!await requireAdminActionPassword("Clear from Employee Domain")) return;
   if (!await confirmDialog("Are you sure you want to remove this schedule from the employee website?")) return;
   try {
     const { session, workspace } = await requirePublishedScheduleAccount();
@@ -1232,6 +1240,7 @@ async function clearEmployeeDomainSchedule(weekStart: string): Promise<void> {
 
 async function clearAllEmployeeDomainSchedules(): Promise<void> {
   if (!publishedSchedules.length) return;
+  if (!await requireAdminActionPassword("Clear All Published Schedules")) return;
   if (!await confirmDialog("Are you sure you want to remove this schedule from the employee website?")) return;
   try {
     const { session, workspace } = await requirePublishedScheduleAccount();
@@ -1242,6 +1251,60 @@ async function clearAllEmployeeDomainSchedules(): Promise<void> {
   } catch (error) {
     showError("Published schedules could not be removed from the employee website.", error);
   }
+}
+
+async function requireAdminActionPassword(actionLabel: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const overlay = document.createElement("section");
+    overlay.className = "modal-shell";
+    overlay.setAttribute("role", "presentation");
+    overlay.dataset.adminPasswordOverlay = "true";
+    overlay.innerHTML = `
+      <div class="modal-panel admin-password-modal" role="dialog" aria-modal="true" aria-labelledby="admin-password-title">
+        <div class="section-head">
+          <h2 id="admin-password-title">Admin Password Required</h2>
+          <p>Enter the admin password to continue.</p>
+          <p class="meta">${escapeHtml(actionLabel)}</p>
+        </div>
+        <form data-admin-password-form>
+          <label>
+            Password
+            <input data-admin-password-input type="password" autocomplete="current-password" />
+          </label>
+          <div class="actions-row">
+            <button class="primary" type="submit">Continue</button>
+            <button class="secondary" data-admin-password-cancel type="button">Cancel</button>
+          </div>
+        </form>
+      </div>`;
+    const finish = (allowed: boolean, showIncorrect = false): void => {
+      if (settled) return;
+      settled = true;
+      document.removeEventListener("keydown", handleKeydown);
+      overlay.remove();
+      cleanupAfterDialog();
+      if (showIncorrect) showToast("Incorrect password. Action canceled.", "bad", 7000);
+      resolve(allowed);
+    };
+    const handleKeydown = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") finish(false);
+    };
+    const form = overlay.querySelector<HTMLFormElement>("[data-admin-password-form]");
+    const input = overlay.querySelector<HTMLInputElement>("[data-admin-password-input]");
+    const cancel = overlay.querySelector<HTMLButtonElement>("[data-admin-password-cancel]");
+    form?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      finish(input?.value === ADMIN_ACTION_PASSWORD, input?.value !== ADMIN_ACTION_PASSWORD);
+    });
+    cancel?.addEventListener("click", () => finish(false));
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) finish(false);
+    });
+    document.addEventListener("keydown", handleKeydown);
+    document.body.appendChild(overlay);
+    window.setTimeout(() => input?.focus(), 0);
+  });
 }
 
 async function requirePublishedScheduleAccount(): Promise<{ session: SupabaseAuthSession; workspace: WorkspaceSummary }> {
@@ -1547,6 +1610,149 @@ async function clearData(): Promise<void> {
   });
   state.schedule = null;
   await saveStateAndRender();
+}
+
+async function loadPreferredSettings(): Promise<void> {
+  if (!await confirmDialog("Load preferred settings? This will replace the current Schedule Rules, Availability Reminder settings, and Supabase Configuration with the preferred settings.")) return;
+  try {
+    const preferred = normalizePreferredSettings(settings.preferredSettings);
+    const nextStaffing = DAYS.reduce((staffing, day) => {
+      staffing[day] = { ...(state.rules.staffing[day] || { open: 0, close: 0 }) };
+      return staffing;
+    }, {} as AppState["rules"]["staffing"]);
+    PREFERRED_STAFFING_DAYS.forEach((day) => {
+      nextStaffing[day] = { ...preferred.scheduleRules.staffing[day] };
+    });
+    state.rules = {
+      ...state.rules,
+      openShift: preferred.scheduleRules.openShift,
+      closeShift: preferred.scheduleRules.closeShift,
+      shiftHours: preferred.scheduleRules.shiftHours,
+      mealBreakHours: preferred.scheduleRules.mealBreakHours,
+      staffing: nextStaffing
+    };
+    settings = normalizeSettings({ ...settings, availabilityDeadline: preferred.availabilityDeadline, preferredSettings: preferred });
+    cloudConfig = await window.habanerosDesktop.saveCloudConfig(preferred.cloudConfig);
+    settings = await window.habanerosDesktop.saveSettings(settings);
+    await saveStateAndRender();
+    renderCloudConfig();
+    renderStaffingInputs();
+    render();
+    showToast("Preferred settings loaded.", "good", 9000);
+  } catch (error) {
+    showError("Preferred settings could not be loaded.", error);
+  }
+}
+
+function openPreferredSettingsEditor(): void {
+  const preferred = normalizePreferredSettings(settings.preferredSettings);
+  const overlay = document.createElement("section");
+  overlay.className = "modal-shell";
+  overlay.dataset.preferredSettingsOverlay = "true";
+  overlay.innerHTML = `
+    <div class="modal-panel preferred-settings-modal" role="dialog" aria-modal="true" aria-labelledby="preferred-settings-title">
+      <div class="section-head with-action">
+        <div>
+          <h2 id="preferred-settings-title">Edit Preferred Settings</h2>
+          <p>Save a preferred configuration here. It will not affect the current app until Load Preferred Settings is clicked.</p>
+        </div>
+        <button class="secondary" data-preferred-cancel type="button">Cancel</button>
+      </div>
+      <form data-preferred-form class="preferred-settings-form">
+        <fieldset><legend>Schedule Rules</legend>
+          <div class="cloud-config-grid">
+            <label>Open Shift <input data-preferred-field="openShift" type="time" value="${preferred.scheduleRules.openShift}" required></label>
+            <label>Close Shift <input data-preferred-field="closeShift" type="time" value="${preferred.scheduleRules.closeShift}" required></label>
+            <label>Shift Length <input data-preferred-field="shiftHours" type="number" min="1" max="24" step="0.5" value="${preferred.scheduleRules.shiftHours}" required></label>
+            <label>Lunch after hours <input data-preferred-field="mealBreakHours" type="number" min="1" max="24" step="0.01" value="${preferred.scheduleRules.mealBreakHours}" required></label>
+          </div>
+          <div class="preferred-staffing-grid">
+            ${PREFERRED_STAFFING_DAYS.map((day) => '<label>' + day + ' Open minimum <input data-preferred-staffing-day="' + day + '" data-preferred-staffing-shift="open" type="number" min="0" max="100" step="1" value="' + preferred.scheduleRules.staffing[day].open + '" required></label><label>' + day + ' Close minimum <input data-preferred-staffing-day="' + day + '" data-preferred-staffing-shift="close" type="number" min="0" max="100" step="1" value="' + preferred.scheduleRules.staffing[day].close + '" required></label>').join("")}
+          </div>
+        </fieldset>
+        <fieldset><legend>Availability Reminders</legend>
+          <div class="cloud-config-grid">
+            <label class="check-row full"><input data-preferred-field="smsRemindersEnabled" type="checkbox" ${checked(preferred.availabilityDeadline.smsRemindersEnabled)}> Enable SMS Reminders</label>
+            <label>Deadline day <select data-preferred-field="deadlineDay">${DAYS.map((day) => '<option value="' + day + '" ' + selected(preferred.availabilityDeadline.deadlineDay, day) + '>' + day + '</option>').join("")}</select></label>
+            <label>Deadline time <input data-preferred-field="deadlineTime" type="time" value="${preferred.availabilityDeadline.deadlineTime}" required></label>
+            <label>First reminder time <input data-preferred-field="firstReminderTime" type="time" value="${preferred.availabilityDeadline.firstReminderTime}" required></label>
+            <label>Second reminder time <input data-preferred-field="secondReminderTime" type="time" value="${preferred.availabilityDeadline.secondReminderTime}" required></label>
+            <label class="full">Reminder #1 message <textarea data-preferred-field="firstReminderMessage" rows="3" maxlength="500" required>${escapeHtml(preferred.availabilityDeadline.firstReminderMessage)}</textarea></label>
+            <label class="full">Reminder #2 message <textarea data-preferred-field="secondReminderMessage" rows="3" maxlength="500" required>${escapeHtml(preferred.availabilityDeadline.secondReminderMessage)}</textarea></label>
+          </div>
+        </fieldset>
+        <fieldset><legend>Supabase Configuration</legend>
+          <div class="cloud-config-grid">
+            <label>Supabase URL <input data-preferred-field="supabaseUrl" type="url" value="${escapeHtml(preferred.cloudConfig.supabaseUrl)}" required></label>
+            <label class="full">Public anon key <textarea data-preferred-field="anonKey" rows="3" required>${escapeHtml(preferred.cloudConfig.anonKey)}</textarea></label>
+          </div>
+        </fieldset>
+        <div class="actions-row preferred-settings-actions">
+          <button class="primary" type="submit">Save</button>
+          <button class="secondary" data-preferred-cancel type="button">Cancel</button>
+        </div>
+      </form>
+    </div>`;
+  const close = (): void => {
+    overlay.remove();
+    cleanupAfterDialog();
+  };
+  overlay.querySelectorAll<HTMLButtonElement>("[data-preferred-cancel]").forEach((button) => button.addEventListener("click", close));
+  overlay.addEventListener("click", (event) => { if (event.target === overlay) close(); });
+  overlay.querySelector<HTMLFormElement>("[data-preferred-form]")?.addEventListener("submit", (event) => void savePreferredSettingsFromModal(event, overlay, close));
+  document.body.appendChild(overlay);
+  window.setTimeout(() => overlay.querySelector<HTMLInputElement>("[data-preferred-field='openShift']")?.focus(), 0);
+}
+
+async function savePreferredSettingsFromModal(event: Event, overlay: HTMLElement, close: () => void): Promise<void> {
+  event.preventDefault();
+  try {
+    const nextPreferred = readPreferredSettingsModal(overlay);
+    settings = normalizeSettings({ ...settings, preferredSettings: nextPreferred });
+    settings = await window.habanerosDesktop.saveSettings(settings);
+    await saveManagerCloudSnapshot().catch((error) => console.warn("Preferred settings were saved locally, but the cloud snapshot was not updated.", error));
+    close();
+    showToast("Preferred settings saved.", "good", 9000);
+  } catch (error) {
+    showError("Preferred settings could not be saved.", error);
+  }
+}
+
+function readPreferredSettingsModal(overlay: HTMLElement): PreferredSettings {
+  const preferred = normalizePreferredSettings(settings.preferredSettings);
+  const value = (field: string) => String(overlay.querySelector<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("[data-preferred-field='" + field + "']")?.value || "").trim();
+  const checkedField = (field: string) => Boolean(overlay.querySelector<HTMLInputElement>("[data-preferred-field='" + field + "']")?.checked);
+  const staffing = DAYS.reduce((result, day) => {
+    result[day] = { ...preferred.scheduleRules.staffing[day] };
+    return result;
+  }, {} as PreferredSettings["scheduleRules"]["staffing"]);
+  overlay.querySelectorAll<HTMLInputElement>("[data-preferred-staffing-day]").forEach((input) => {
+    const day = input.dataset.preferredStaffingDay as DayName;
+    const shift = input.dataset.preferredStaffingShift as "open" | "close";
+    if (DAYS.includes(day) && (shift === "open" || shift === "close")) staffing[day][shift] = Number(input.value) || 0;
+  });
+  return normalizePreferredSettings({
+    scheduleRules: {
+      openShift: value("openShift"),
+      closeShift: value("closeShift"),
+      shiftHours: Number(value("shiftHours")),
+      mealBreakHours: Number(value("mealBreakHours")),
+      staffing
+    },
+    availabilityDeadline: {
+      smsRemindersEnabled: checkedField("smsRemindersEnabled"),
+      deadlineDay: (DAYS.includes(value("deadlineDay") as DayName) ? value("deadlineDay") : "Tuesday") as DayName,
+      deadlineTime: value("deadlineTime"),
+      firstReminderTime: value("firstReminderTime"),
+      secondReminderTime: value("secondReminderTime"),
+      firstReminderMessage: value("firstReminderMessage"),
+      secondReminderMessage: value("secondReminderMessage")
+    },
+    cloudConfig: {
+      supabaseUrl: value("supabaseUrl").replace(/\/$/, ""),
+      anonKey: value("anonKey")
+    }
+  });
 }
 
 function renderDeadlineSettings(): void {

@@ -1,5 +1,5 @@
 import { AppSettings, AvailabilitySubmission, DAYS, DayName, Worker } from "./types";
-import { defaultSettings } from "./defaults";
+import { defaultSettings, normalizePreferredSettings } from "./defaults";
 import { formatTime } from "./time";
 
 export interface AvailabilityStatusSummary {
@@ -30,7 +30,7 @@ export function normalizeSettings(settings: Partial<AppSettings> | null | undefi
   deadline.secondReminderTime = normalizeTime(deadline.secondReminderTime, defaults.availabilityDeadline.secondReminderTime);
   deadline.firstReminderMessage = normalizeMessage(deadline.firstReminderMessage, defaults.availabilityDeadline.firstReminderMessage);
   deadline.secondReminderMessage = normalizeMessage(deadline.secondReminderMessage, defaults.availabilityDeadline.secondReminderMessage);
-  return { ...defaults, ...(settings || {}), availabilityDeadline: deadline };
+  return { ...defaults, ...(settings || {}), availabilityDeadline: deadline, preferredSettings: normalizePreferredSettings(settings?.preferredSettings) };
 }
 
 export function getAvailabilityWeekStart(scheduleWeekStart: string): string {

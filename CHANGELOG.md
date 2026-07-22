@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.10.20 - 2026-07-22
+
+- Added top-bar Load Preferred Settings and Edit Preferred Settings actions.
+- Added saved preferred settings for schedule rules, availability reminders, and Supabase configuration without changing active settings until loaded.
+- Added default preferred settings for Habaneros schedule rules, SMS reminder defaults, and Supabase connection values.
+
+## 1.10.19 - 2026-07-22
+
+- Fixed the employee-domain admin password check so the Push to Employee Domain and published schedule clear actions continue after the correct password is entered.
+
+## 1.10.18 - 2026-07-22
+
+- Added an admin password safety check before pushing schedules to the employee website or clearing published employee website schedules.
+
 ## 1.10.17 - 2026-07-21
 
 - Fixed generated schedule day ordering by replacing staffing object-key iteration with the canonical Monday-through-Sunday order.

@@ -291,10 +291,18 @@ button:disabled { opacity: .52; cursor: not-allowed; }
 .schedule-rules-card summary small { color: var(--muted); font-weight: 700; line-height: 1.4; }
 .rules-toggle-label { justify-self: end; border: 1px solid rgba(44,116,57,.35); border-radius: 6px; padding: 8px 12px; color: var(--brand); background: var(--paper); font-size: .84rem; white-space: nowrap; }
 .schedule-rules-body { padding: 0 16px 16px; }
+.preferred-action { min-height: 36px; padding: 7px 10px; white-space: nowrap; }
 [data-theme="dark"] .schedule-rules-card { background: #181d17; border-color: rgba(113,164,90,.35); }
 [data-theme="dark"] .sms-toggle { background: #181d17; }
 .modal-shell { position: fixed; inset: 0; z-index: 15; display: grid; place-items: center; padding: 22px; background: rgba(20,28,20,.45); }
 .modal-panel { width: min(980px, 100%); max-height: 92vh; overflow: auto; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 20px; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+.admin-password-modal { width: min(430px, 100%); }
+.admin-password-modal form { display: grid; gap: 14px; }
+.preferred-settings-modal { width: min(1060px, 100%); }
+.preferred-settings-form { display: grid; gap: 14px; }
+.preferred-staffing-grid { display: grid; grid-template-columns: repeat(2, minmax(180px, 1fr)); gap: 10px; margin-top: 12px; }
+.preferred-settings-actions { justify-content: flex-end; position: sticky; bottom: 0; padding-top: 10px; background: linear-gradient(180deg, rgba(255,255,255,0), var(--paper) 28%); }
+[data-theme="dark"] .preferred-settings-actions { background: linear-gradient(180deg, rgba(32,37,31,0), var(--paper) 28%); }
 .worker-card { box-shadow: 0 4px 14px rgba(22,38,24,.05); }
 .worker-details { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
 .worker-details summary { cursor: pointer; font-weight: 900; color: var(--brand); }
@@ -334,6 +342,8 @@ button:disabled { opacity: .52; cursor: not-allowed; }
   .app-toast { left: 12px; right: 12px; top: 100px; }
   .schedule-rules-card summary { grid-template-columns: 1fr; }
   .rules-toggle-label { justify-self: start; }
+  .preferred-action { flex: 1 1 180px; }
+  .preferred-staffing-grid { grid-template-columns: 1fr; }
   .modal-shell { padding: 0; }
   .modal-panel { max-height: 100vh; border-radius: 0; }
 }

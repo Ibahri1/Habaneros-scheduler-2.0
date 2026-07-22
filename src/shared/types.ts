@@ -87,8 +87,13 @@ export interface AvailabilityDeadlineSettings {
   firstReminderMessage: string;
   secondReminderMessage: string;
 }
-export interface AppSettings { darkMode: boolean; confirmBeforeClose: boolean; availabilityDeadline: AvailabilityDeadlineSettings; }
 export interface CloudConfig { supabaseUrl: string; anonKey: string; }
+export interface PreferredSettings {
+  scheduleRules: Omit<ScheduleRules, "weekStart">;
+  availabilityDeadline: AvailabilityDeadlineSettings;
+  cloudConfig: CloudConfig;
+}
+export interface AppSettings { darkMode: boolean; confirmBeforeClose: boolean; availabilityDeadline: AvailabilityDeadlineSettings; preferredSettings: PreferredSettings; }
 export interface AvailabilitySubmission {
   id: string;
   employeeId: string;
