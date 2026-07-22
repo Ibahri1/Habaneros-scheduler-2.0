@@ -52,12 +52,12 @@ $$;
 create or replace function public.submit_employee_availability(p_employee_code text, p_week_start date, p_available_days text[], p_shift_availability jsonb)
 returns uuid language plpgsql security definer set search_path = public, extensions
 as $$
-declare v_employee_id uuid; v_submission_id uuid; v_first_sunday date; v_days text[] := array['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+declare v_employee_id uuid; v_submission_id uuid; v_current_dow integer; v_next_monday date; v_days text[] := array['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 begin
   if p_employee_code !~ '^\d{4}$' then raise exception 'Invalid employee code'; end if;
-  v_first_sunday := current_date + ((7 - extract(dow from current_date)::integer) % 7);
-  if p_week_start is null or extract(dow from p_week_start) <> 0 then raise exception 'Please select a Sunday week from the available list.'; end if;
-  if p_week_start < v_first_sunday or p_week_start > v_first_sunday + 21 then raise exception 'Availability can only be submitted for one of the next four Sundays.'; end if;
+  v_current_dow := extract(dow from current_date)::integer;
+  v_next_monday := current_date + case when v_current_dow = 0 then 1 else 8 - v_current_dow end;
+  if p_week_start is null or p_week_start <> v_next_monday then raise exception 'Availability can only be submitted for next week.'; end if;
   if p_shift_availability is null or jsonb_typeof(p_shift_availability) <> 'object' or jsonb_object_length(p_shift_availability) <> 7 then raise exception 'Choose availability for every day.'; end if;
   if exists (select 1 from jsonb_each_text(p_shift_availability) where key <> all(v_days) or value not in ('Open','Close','Both','Unavailable')) then raise exception 'Invalid shift availability'; end if;
   if not coalesce(p_available_days, '{}') <@ v_days then raise exception 'Invalid available day'; end if;

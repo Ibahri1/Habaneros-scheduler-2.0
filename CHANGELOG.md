@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.10.21 - 2026-07-22
+
+- Fixed employee availability submission validation so the public form and Supabase RPC accept only the following Monday-start week instead of the old next-four-Sundays list.
+
 ## 1.10.20 - 2026-07-22
 
 - Added top-bar Load Preferred Settings and Edit Preferred Settings actions.

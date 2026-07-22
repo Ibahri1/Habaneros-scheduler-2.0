@@ -42,6 +42,7 @@ const TRANSLATIONS = {
     notConfigured: "The availability form has not been configured yet.",
     serviceError: "The availability service returned an error.",
     duplicateSubmission: "You have already submitted availability for this week.",
+    onlyNextWeek: "Availability can only be submitted for next week.",
     chooseEveryDay: "Choose availability for every day.",
     invalidShiftAvailability: "Invalid shift availability.",
     daysMismatch: "Available days do not match shift availability.",
@@ -102,6 +103,7 @@ const TRANSLATIONS = {
     notConfigured: "El formulario de disponibilidad todavía no está configurado.",
     serviceError: "El servicio de disponibilidad devolvió un error.",
     duplicateSubmission: "Ya enviaste disponibilidad para esta semana.",
+    onlyNextWeek: "La disponibilidad solo se puede enviar para la proxima semana.",
     chooseEveryDay: "Selecciona disponibilidad para cada día.",
     invalidShiftAvailability: "La disponibilidad seleccionada no es válida.",
     daysMismatch: "Los días disponibles no coinciden con la disponibilidad por turno.",
@@ -173,6 +175,8 @@ codeForm.addEventListener("submit", async (event) => {
 
 availabilityForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  setAvailabilityWeek();
+  if (!isValidNextWeekStart(weekStart.value)) return showMessage(t("onlyNextWeek"));
   const shiftAvailability = Object.fromEntries(DAYS.map((day) => [day, document.querySelector("[data-shift-day='" + day + "']").value]));
   const availableDays = DAYS.filter((day) => shiftAvailability[day] !== "Unavailable");
   try {
@@ -213,6 +217,10 @@ function setAvailabilityWeek() {
   const targetWeek = followingMondayWeekStart();
   weekStart.value = targetWeek;
   weekStartLabel.textContent = t("weekOf") + " " + formatWeek(targetWeek, currentLocale());
+}
+
+function isValidNextWeekStart(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) && value === followingMondayWeekStart();
 }
 
 function populateScheduleWeeks() {
@@ -275,6 +283,7 @@ function localizeError(message) {
     "The availability form has not been configured yet.": "notConfigured",
     "The availability service returned an error.": "serviceError",
     "You have already submitted availability for this week.": "duplicateSubmission",
+    "Availability can only be submitted for next week.": "onlyNextWeek",
     "Choose availability for every day.": "chooseEveryDay",
     "Invalid shift availability": "invalidShiftAvailability",
     "Invalid shift availability.": "invalidShiftAvailability",
