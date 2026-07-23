@@ -299,8 +299,14 @@ button:disabled { opacity: .52; cursor: not-allowed; }
 .admin-password-modal { width: min(430px, 100%); }
 .admin-password-modal form { display: grid; gap: 14px; }
 .preferred-settings-modal { width: min(1060px, 100%); }
+.schedule-posted-text-modal { width: min(760px, 100%); }
 .preferred-settings-form { display: grid; gap: 14px; }
 .preferred-staffing-grid { display: grid; grid-template-columns: repeat(2, minmax(180px, 1fr)); gap: 10px; margin-top: 12px; }
+.schedule-text-recipient-list { display: grid; gap: 8px; }
+.schedule-text-recipient { justify-content: flex-start; border: 1px solid var(--line); border-radius: 8px; padding: 9px; color: var(--ink); }
+.schedule-text-recipient span { display: grid; gap: 2px; }
+.schedule-text-recipient em { color: var(--muted); font-style: normal; font-size: .85rem; }
+.activity-log-row .history-details { align-content: center; }
 .preferred-settings-actions { justify-content: flex-end; position: sticky; bottom: 0; padding-top: 10px; background: linear-gradient(180deg, rgba(255,255,255,0), var(--paper) 28%); }
 [data-theme="dark"] .preferred-settings-actions { background: linear-gradient(180deg, rgba(32,37,31,0), var(--paper) 28%); }
 .worker-card { box-shadow: 0 4px 14px rgba(22,38,24,.05); }

@@ -75,7 +75,21 @@ export interface DaySchedule {
 
 export interface GeneratedSchedule { createdAt: string; days: DaySchedule[]; }
 export interface ScheduleHistoryEntry { id: string; name: string; weekStart: string; schedule: GeneratedSchedule; createdAt: string; }
-export interface AppState { workers: Worker[]; rules: ScheduleRules; schedule: GeneratedSchedule | null; scheduleHistory: ScheduleHistoryEntry[]; }
+export type ActivityCategory = "schedule" | "text" | "availability" | "settings" | "account";
+export interface ActivityLogEntry {
+  id: string;
+  timestamp: string;
+  category: ActivityCategory;
+  actionType: string;
+  message: string;
+  weekStart?: string;
+  employeeName?: string;
+  employeeId?: string;
+  employeeCode?: string;
+  userId?: string;
+  metadata?: Record<string, unknown>;
+}
+export interface AppState { workers: Worker[]; rules: ScheduleRules; schedule: GeneratedSchedule | null; scheduleHistory: ScheduleHistoryEntry[]; activityLog: ActivityLogEntry[]; }
 export interface PublishedScheduleSummary { id: string; workspaceId: string; weekStart: string; publishedAt: string; updatedAt: string; }
 export interface PublishedScheduleRecord extends PublishedScheduleSummary { schedule: GeneratedSchedule; }
 export interface AvailabilityDeadlineSettings {
@@ -86,6 +100,8 @@ export interface AvailabilityDeadlineSettings {
   secondReminderTime: string;
   firstReminderMessage: string;
   secondReminderMessage: string;
+  schedulePostedMessage: string;
+  employeeScheduleUrl: string;
 }
 export interface CloudConfig { supabaseUrl: string; anonKey: string; }
 export interface PreferredSettings {

@@ -30,6 +30,8 @@ export function normalizeSettings(settings: Partial<AppSettings> | null | undefi
   deadline.secondReminderTime = normalizeTime(deadline.secondReminderTime, defaults.availabilityDeadline.secondReminderTime);
   deadline.firstReminderMessage = normalizeMessage(deadline.firstReminderMessage, defaults.availabilityDeadline.firstReminderMessage);
   deadline.secondReminderMessage = normalizeMessage(deadline.secondReminderMessage, defaults.availabilityDeadline.secondReminderMessage);
+  deadline.schedulePostedMessage = normalizeMessage(deadline.schedulePostedMessage, defaults.availabilityDeadline.schedulePostedMessage);
+  deadline.employeeScheduleUrl = String(deadline.employeeScheduleUrl || defaults.availabilityDeadline.employeeScheduleUrl).trim();
   return { ...defaults, ...(settings || {}), availabilityDeadline: deadline, preferredSettings: normalizePreferredSettings(settings?.preferredSettings) };
 }
 

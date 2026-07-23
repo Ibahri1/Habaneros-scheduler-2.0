@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.10.22 - 2026-07-22
+
+- Added a post-push schedule text workflow with editable message and selectable employee recipients.
+- Added a repush warning before replacing an already published employee-domain schedule.
+- Added an Activity Log section with filters and password-protected clearing.
+- Password-protected enabling SMS reminders and sending test SMS messages.
+- Added Schedule Posted Text Message and Employee Schedule Link settings, including Preferred Settings support.
+- Extended the SMS Edge Function with a separate schedule posted text mode.
+
 ## 1.10.21 - 2026-07-22
 
 - Fixed employee availability submission validation so the public form and Supabase RPC accept only the following Monday-start week instead of the old next-four-Sundays list.

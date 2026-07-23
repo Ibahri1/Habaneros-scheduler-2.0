@@ -35,6 +35,7 @@ function readDataFile(): DataFile {
     rawState.rules = { ...fallback.state.rules, ...(rawState.rules || {}) };
     if (!rawState.rules.weekStart) rawState.rules.weekStart = nextMonday();
     rawState.workers = (rawState.workers || []).map((worker) => normalizeWorker(worker, rawState.rules));
+    rawState.activityLog = rawState.activityLog || [];
     const state = appStateSchema.parse(rawState) as AppState;
     const settings = appSettingsSchema.parse(normalizeSettings(parsed.settings)) as AppSettings;
     return { state, settings, savedAt: parsed.savedAt || fallback.savedAt };

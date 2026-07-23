@@ -10,6 +10,7 @@ interface EmployeeRow {
 
 interface SubmissionRow { employee_id: string; }
 interface ReminderLogRow { employee_id: string; status: string; }
+interface SchedulePostedRecipient { id?: string; name: string; phone: string; }
 
 interface AvailabilityDeadlineSettings {
   smsRemindersEnabled: boolean;
@@ -19,6 +20,8 @@ interface AvailabilityDeadlineSettings {
   secondReminderTime: string;
   firstReminderMessage: string;
   secondReminderMessage: string;
+  schedulePostedMessage: string;
+  employeeScheduleUrl: string;
 }
 
 const DEFAULT_SETTINGS: AvailabilityDeadlineSettings = {
@@ -28,7 +31,9 @@ const DEFAULT_SETTINGS: AvailabilityDeadlineSettings = {
   firstReminderTime: "12:00",
   secondReminderTime: "20:00",
   firstReminderMessage: "Habaneros Reminder: Please submit your availability for next week's schedule before tonight's deadline.",
-  secondReminderMessage: "Habaneros Final Reminder: We have not received your availability. Please submit it before tonight's deadline."
+  secondReminderMessage: "Habaneros Final Reminder: We have not received your availability. Please submit it before tonight's deadline.",
+  schedulePostedMessage: "Habaneros Schedule Posted: Next week's schedule is now available. Please view it here: [employee schedule link]",
+  employeeScheduleUrl: "https://ibahri1.github.io/Habaneros-scheduler-2.0/employee-availability/"
 };
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -40,7 +45,7 @@ Deno.serve(async (request) => {
 
   try {
     const body = await request.json().catch(() => ({}));
-    const mode = body.mode === "test" ? "test" : body.mode === "dryRun" ? "dryRun" : "send";
+    const mode = body.mode === "test" ? "test" : body.mode === "dryRun" ? "dryRun" : body.mode === "schedulePosted" ? "schedulePosted" : "send";
     const settings = await loadDeadlineSettings();
     const now = new Date();
     const timeZone = Deno.env.get("HABANEROS_TIME_ZONE") || "America/Los_Angeles";
@@ -53,6 +58,25 @@ Deno.serve(async (request) => {
       if (!settings.smsRemindersEnabled) return jsonResponse({ mode, smsRemindersEnabled: false, reminderType: "test", targetWeek, employeesChecked: 0, messagesSent: 0, employeesSkipped: 0, errors: [], message: "SMS reminders are disabled." });
       const messageId = await sendTextbeltSms(testPhoneNumber, renderMessage(settings.firstReminderMessage, settings, targetWeek, "Test Employee"));
       return jsonResponse({ mode, reminderType: "test", targetWeek, employeesChecked: 1, messagesSent: 1, employeesSkipped: 0, errors: [], messageId });
+    }
+
+    if (mode === "schedulePosted") {
+      const weekStart = String(body.weekStart || targetWeek);
+      const message = String(body.message || settings.schedulePostedMessage).trim().slice(0, 500);
+      const recipients = Array.isArray(body.recipients) ? body.recipients.map(normalizeSchedulePostedRecipient).filter(Boolean) as SchedulePostedRecipient[] : [];
+      if (!message) return jsonResponse({ error: "Schedule posted message is required." }, 400);
+      if (!recipients.length) return jsonResponse({ error: "At least one recipient is required." }, 400);
+      const errors: Array<{ employee: string; message: string }> = [];
+      let sent = 0;
+      for (const recipient of recipients) {
+        try {
+          await sendTextbeltSms(recipient.phone, message);
+          sent++;
+        } catch (error) {
+          errors.push({ employee: recipient.name, message: error instanceof Error ? error.message : "Unknown SMS error." });
+        }
+      }
+      return jsonResponse({ mode, reminderType: "schedulePosted", targetWeek: weekStart, employeesChecked: recipients.length, messagesSent: sent, messagesFailed: errors.length, employeesSkipped: 0, errors });
     }
 
     const employees = await loadReminderEmployees();
@@ -112,7 +136,17 @@ function normalizeSettings(input: Partial<AvailabilityDeadlineSettings>): Availa
   settings.secondReminderTime = normalizeTime(settings.secondReminderTime, DEFAULT_SETTINGS.secondReminderTime);
   settings.firstReminderMessage = String(settings.firstReminderMessage || DEFAULT_SETTINGS.firstReminderMessage).slice(0, 500);
   settings.secondReminderMessage = String(settings.secondReminderMessage || DEFAULT_SETTINGS.secondReminderMessage).slice(0, 500);
+  settings.schedulePostedMessage = String(settings.schedulePostedMessage || DEFAULT_SETTINGS.schedulePostedMessage).slice(0, 500);
+  settings.employeeScheduleUrl = String(settings.employeeScheduleUrl || DEFAULT_SETTINGS.employeeScheduleUrl).slice(0, 500);
   return settings;
+}
+
+function normalizeSchedulePostedRecipient(value: unknown): SchedulePostedRecipient | null {
+  if (!value || typeof value !== "object") return null;
+  const item = value as Record<string, unknown>;
+  const phone = String(item.phone || "").trim();
+  if (!phone) return null;
+  return { id: String(item.id || ""), name: String(item.name || "Employee"), phone };
 }
 
 async function loadReminderEmployees(): Promise<EmployeeRow[]> {

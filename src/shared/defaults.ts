@@ -26,14 +26,16 @@ export function defaultSettings(): AppSettings {
       firstReminderTime: "12:00",
       secondReminderTime: "20:00",
       firstReminderMessage: "Habaneros Reminder: Please submit your availability for next week's schedule before tonight's deadline.",
-      secondReminderMessage: "Habaneros Final Reminder: We have not received your availability. Please submit it before tonight's deadline."
+      secondReminderMessage: "Habaneros Final Reminder: We have not received your availability. Please submit it before tonight's deadline.",
+      schedulePostedMessage: "Habaneros Schedule Posted: Next week's schedule is now available. Please view it here: [employee schedule link]",
+      employeeScheduleUrl: "https://ibahri1.github.io/Habaneros-scheduler-2.0/employee-availability/"
     },
     preferredSettings: defaultPreferredSettings()
   };
 }
 
 export function defaultAppState(): AppState {
-  return { workers: [], rules: defaultRules(), schedule: null, scheduleHistory: [] };
+  return { workers: [], rules: defaultRules(), schedule: null, scheduleHistory: [], activityLog: [] };
 }
 
 export function defaultPreferredSettings(): PreferredSettings {
@@ -60,7 +62,9 @@ export function defaultPreferredSettings(): PreferredSettings {
       firstReminderTime: "20:00",
       secondReminderTime: "19:00",
       firstReminderMessage: "Habaneros Reminder: Please submit your availability for next week's schedule before tonight's deadline. Deadline is tonight at 11:59PM",
-      secondReminderMessage: "Habaneros Final Reminder: We have not received your availability. Please submit it before tonight's deadline, TONIGHT AT 11:59PM"
+      secondReminderMessage: "Habaneros Final Reminder: We have not received your availability. Please submit it before tonight's deadline, TONIGHT AT 11:59PM",
+      schedulePostedMessage: "Habaneros Schedule Posted: Next week's schedule is now available. Please view it here: [employee schedule link]",
+      employeeScheduleUrl: "https://ibahri1.github.io/Habaneros-scheduler-2.0/employee-availability/"
     },
     cloudConfig: {
       supabaseUrl: "https://zwrgrgzixfrlipvdydtq.supabase.co",
@@ -99,7 +103,9 @@ export function normalizePreferredSettings(input: Partial<PreferredSettings> | n
       firstReminderTime: timeValue(input?.availabilityDeadline?.firstReminderTime, defaults.availabilityDeadline.firstReminderTime),
       secondReminderTime: timeValue(input?.availabilityDeadline?.secondReminderTime, defaults.availabilityDeadline.secondReminderTime),
       firstReminderMessage: messageValue(input?.availabilityDeadline?.firstReminderMessage, defaults.availabilityDeadline.firstReminderMessage),
-      secondReminderMessage: messageValue(input?.availabilityDeadline?.secondReminderMessage, defaults.availabilityDeadline.secondReminderMessage)
+      secondReminderMessage: messageValue(input?.availabilityDeadline?.secondReminderMessage, defaults.availabilityDeadline.secondReminderMessage),
+      schedulePostedMessage: messageValue(input?.availabilityDeadline?.schedulePostedMessage, defaults.availabilityDeadline.schedulePostedMessage),
+      employeeScheduleUrl: String(input?.availabilityDeadline?.employeeScheduleUrl || defaults.availabilityDeadline.employeeScheduleUrl).trim()
     },
     cloudConfig: {
       supabaseUrl: String(input?.cloudConfig?.supabaseUrl || defaults.cloudConfig.supabaseUrl).trim().replace(/\/$/, ""),
