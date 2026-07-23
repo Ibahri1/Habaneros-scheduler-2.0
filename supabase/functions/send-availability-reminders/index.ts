@@ -11,6 +11,14 @@ interface EmployeeRow {
 interface SubmissionRow { employee_id: string; }
 interface ReminderLogRow { employee_id: string; status: string; }
 interface SchedulePostedRecipient { id?: string; name: string; phone: string; }
+interface SchedulePostedResult {
+  id?: string;
+  name: string;
+  phone: string;
+  success: boolean;
+  messageId?: string;
+  error?: string;
+}
 
 interface AvailabilityDeadlineSettings {
   smsRemindersEnabled: boolean;
@@ -66,17 +74,24 @@ Deno.serve(async (request) => {
       const recipients = Array.isArray(body.recipients) ? body.recipients.map(normalizeSchedulePostedRecipient).filter(Boolean) as SchedulePostedRecipient[] : [];
       if (!message) return jsonResponse({ error: "Schedule posted message is required." }, 400);
       if (!recipients.length) return jsonResponse({ error: "At least one recipient is required." }, 400);
-      const errors: Array<{ employee: string; message: string }> = [];
-      let sent = 0;
+      const results: SchedulePostedResult[] = [];
       for (const recipient of recipients) {
+        const phoneCheck = normalizeSmsPhone(recipient.phone);
+        if (!phoneCheck.usable) {
+          results.push({ id: recipient.id, name: recipient.name, phone: recipient.phone, success: false, error: phoneCheck.reason });
+          continue;
+        }
         try {
-          await sendTextbeltSms(recipient.phone, message);
-          sent++;
+          const messageId = await sendTextbeltSms(phoneCheck.normalized, message);
+          results.push({ id: recipient.id, name: recipient.name, phone: phoneCheck.normalized, success: true, messageId });
         } catch (error) {
-          errors.push({ employee: recipient.name, message: error instanceof Error ? error.message : "Unknown SMS error." });
+          const errorMessage = error instanceof Error ? error.message : "Unknown SMS error.";
+          results.push({ id: recipient.id, name: recipient.name, phone: phoneCheck.normalized, success: false, error: "Textbelt error: " + errorMessage });
         }
       }
-      return jsonResponse({ mode, reminderType: "schedulePosted", targetWeek: weekStart, employeesChecked: recipients.length, messagesSent: sent, messagesFailed: errors.length, employeesSkipped: 0, errors });
+      const sent = results.filter((result) => result.success).length;
+      const errors = results.filter((result) => !result.success).map((result) => ({ employee: result.name, phone: result.phone, message: result.error || "Unknown SMS error." }));
+      return jsonResponse({ mode, reminderType: "schedulePosted", targetWeek: weekStart, employeesChecked: recipients.length, messagesSent: sent, messagesFailed: errors.length, employeesSkipped: 0, results, errors });
     }
 
     const employees = await loadReminderEmployees();
@@ -145,8 +160,18 @@ function normalizeSchedulePostedRecipient(value: unknown): SchedulePostedRecipie
   if (!value || typeof value !== "object") return null;
   const item = value as Record<string, unknown>;
   const phone = String(item.phone || "").trim();
-  if (!phone) return null;
   return { id: String(item.id || ""), name: String(item.name || "Employee"), phone };
+}
+
+function normalizeSmsPhone(value: string): { normalized: string; usable: boolean; reason: string } {
+  const raw = String(value || "").trim();
+  if (!raw) return { normalized: "", usable: false, reason: "Missing phone number" };
+  const plusCleaned = raw.replace(/[^\d+]/g, "");
+  if (/^\+1\d{10}$/.test(plusCleaned)) return { normalized: plusCleaned, usable: true, reason: "" };
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length === 10) return { normalized: "+1" + digits, usable: true, reason: "" };
+  if (digits.length === 11 && digits.startsWith("1")) return { normalized: "+" + digits, usable: true, reason: "" };
+  return { normalized: "", usable: false, reason: "Invalid phone number" };
 }
 
 async function loadReminderEmployees(): Promise<EmployeeRow[]> {
@@ -171,7 +196,9 @@ async function recordReminder(employee: EmployeeRow, weekStart: string, reminder
 
 async function sendTextbeltSms(phone: string, message: string): Promise<string> {
   const key = requireSecret("TEXTBELT_API_KEY");
-  const params = new URLSearchParams({ phone, message, key });
+  const phoneCheck = normalizeSmsPhone(phone);
+  if (!phoneCheck.usable) throw new Error(phoneCheck.reason);
+  const params = new URLSearchParams({ phone: phoneCheck.normalized, message, key });
   const response = await fetch("https://textbelt.com/text", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },

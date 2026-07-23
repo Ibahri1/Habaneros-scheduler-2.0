@@ -304,6 +304,7 @@ button:disabled { opacity: .52; cursor: not-allowed; }
 .preferred-staffing-grid { display: grid; grid-template-columns: repeat(2, minmax(180px, 1fr)); gap: 10px; margin-top: 12px; }
 .schedule-text-recipient-list { display: grid; gap: 8px; }
 .schedule-text-recipient { justify-content: flex-start; border: 1px solid var(--line); border-radius: 8px; padding: 9px; color: var(--ink); }
+.schedule-text-recipient.unavailable { opacity: .72; background: var(--warn-bg); }
 .schedule-text-recipient span { display: grid; gap: 2px; }
 .schedule-text-recipient em { color: var(--muted); font-style: normal; font-size: .85rem; }
 .activity-log-row .history-details { align-content: center; }

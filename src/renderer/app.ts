@@ -33,6 +33,22 @@ let workspaceHydrated = false;
 let workspaceSaveChain = Promise.resolve();
 let activityLogFilterValue: ActivityCategory | "all" = "all";
 
+interface SmsPhoneCheck {
+  raw: string;
+  normalized: string;
+  usable: boolean;
+  reason: string;
+}
+
+interface SchedulePostedSendResult {
+  id?: string;
+  name?: string;
+  phone?: string;
+  success?: boolean;
+  error?: string;
+  messageId?: string;
+}
+
 const els = {
   loginScreen: byId<HTMLElement>("loginScreen"),
   toast: byId<HTMLDivElement>("toast"),
@@ -1264,8 +1280,13 @@ async function askSendSchedulePostedText(weekStart: string): Promise<void> {
 }
 
 function openSchedulePostedTextModal(weekStart: string): void {
-  const eligible = state.workers.filter((worker) => worker.active && worker.mobilePhone.trim());
-  const withoutPhones = state.workers.filter((worker) => worker.active && !worker.mobilePhone.trim()).length;
+  const activeWorkers = state.workers.filter((worker) => worker.active);
+  const recipientRows = activeWorkers.map((worker) => ({ worker, phone: normalizeSmsPhone(worker.mobilePhone) }));
+  const eligible = recipientRows.filter((row) => row.phone.usable);
+  const unavailable = recipientRows.filter((row) => !row.phone.usable);
+  const unavailableSummary = unavailable.length
+    ? unavailable.map((row) => row.worker.name + ": " + row.phone.reason).join("; ")
+    : "All active employees have usable phone numbers.";
   const overlay = document.createElement("section");
   overlay.className = "modal-shell";
   overlay.dataset.schedulePostedTextOverlay = "true";
@@ -1280,10 +1301,11 @@ function openSchedulePostedTextModal(weekStart: string): void {
       </div>
       <form data-schedule-text-form class="preferred-settings-form">
         <label>Text Message <textarea data-schedule-text-message rows="4" maxlength="500" required>${escapeHtml(renderSchedulePostedMessage(weekStart))}</textarea></label>
-        <div class="deadline-preview">${withoutPhones ? escapeHtml(withoutPhones + " active employee" + (withoutPhones === 1 ? "" : "s") + " without phone numbers cannot receive texts.") : "All active employees have phone numbers."}</div>
+        <div class="deadline-preview">${escapeHtml(unavailableSummary)}</div>
         <fieldset><legend>Recipients</legend><div class="schedule-text-recipient-list">
-          ${eligible.length ? eligible.map((worker) => '<label class="check-row schedule-text-recipient"><input data-schedule-text-worker="' + worker.id + '" type="checkbox" checked><span><strong>' + escapeHtml(worker.name) + '</strong><em>' + escapeHtml(worker.mobilePhone) + '</em></span></label>').join("") : '<div class="empty-state">No active employees have phone numbers.</div>'}
+          ${eligible.length ? eligible.map((row) => '<label class="check-row schedule-text-recipient"><input data-schedule-text-worker="' + row.worker.id + '" type="checkbox" checked><span><strong>' + escapeHtml(row.worker.name) + '</strong><em>' + escapeHtml(scheduleTextPhoneLabel(row.phone)) + '</em></span></label>').join("") : '<div class="empty-state">No active employees have usable phone numbers.</div>'}
         </div></fieldset>
+        ${unavailable.length ? '<fieldset><legend>Cannot Text</legend><div class="schedule-text-recipient-list">' + unavailable.map((row) => '<label class="check-row schedule-text-recipient unavailable"><input type="checkbox" disabled><span><strong>' + escapeHtml(row.worker.name) + '</strong><em>' + escapeHtml(row.phone.reason) + (row.phone.raw ? ': ' + escapeHtml(row.phone.raw) : '') + '</em></span></label>').join("") + '</div></fieldset>' : ""}
         <div class="actions-row preferred-settings-actions">
           <button class="primary" type="submit" ${eligible.length ? "" : "disabled"}>Send Text</button>
           <button class="secondary" data-schedule-text-cancel type="button">Skip</button>
@@ -1308,20 +1330,58 @@ async function sendSchedulePostedText(event: Event, overlay: HTMLElement, weekSt
   event.preventDefault();
   const message = overlay.querySelector<HTMLTextAreaElement>("[data-schedule-text-message]")?.value.trim() || "";
   const selectedIds = new Set(Array.from(overlay.querySelectorAll<HTMLInputElement>("[data-schedule-text-worker]:checked")).map((input) => input.dataset.scheduleTextWorker || ""));
-  const recipients = state.workers.filter((worker) => selectedIds.has(worker.id) && worker.mobilePhone.trim()).map((worker) => ({ id: worker.id, name: worker.name, phone: worker.mobilePhone.trim() }));
+  const selectedWorkers = state.workers.filter((worker) => selectedIds.has(worker.id));
+  const invalidSelected = selectedWorkers.map((worker) => ({ worker, phone: normalizeSmsPhone(worker.mobilePhone) })).filter((row) => !row.phone.usable);
+  const recipients = selectedWorkers
+    .map((worker) => ({ worker, phone: normalizeSmsPhone(worker.mobilePhone) }))
+    .filter((row) => row.phone.usable)
+    .map((row) => ({ id: row.worker.id, name: row.worker.name, phone: row.phone.normalized }));
   if (!message) { showToast("Enter a schedule posted text message.", "bad", 7000); return; }
-  if (!recipients.length) { showToast("Select at least one employee with a phone number.", "bad", 7000); return; }
+  if (invalidSelected.length) {
+    showToast("Fix invalid selected recipients first: " + invalidSelected.map((row) => row.worker.name + " - " + row.phone.reason).join("; "), "bad", 12000);
+    return;
+  }
+  if (!recipients.length) { showToast("Select at least one employee with a usable phone number.", "bad", 7000); return; }
   try {
     const result = await invokeReminderFunction("schedulePosted", "", { weekStart, message, recipients });
     const sent = Number(result.messagesSent || 0);
-    const failed = Array.isArray(result.errors) ? result.errors.length : Number(result.messagesFailed || 0);
+    const resultRows = parseSchedulePostedResults(result);
+    const failures = resultRows.filter((row) => row.success === false);
+    const failed = failures.length || Number(result.messagesFailed || 0);
+    const failureDetails = failures.map((row) => (row.name || "Employee") + " - " + (row.error || "Unknown SMS error."));
+    const detailText = failureDetails.length ? ": " + failureDetails.join("; ") : ".";
     close();
-    showToast(failed ? "Schedule text sent to " + sent + " employees. Failed for " + failed + " employees." : "Schedule text sent to " + sent + " employees.", failed ? "warn" : "good", 10000);
-    addActivityLog({ category: "text", actionType: "schedule_posted_text_sent", message: failed ? "Schedule posted text sent to " + sent + " employees. Failed for " + failed + " employees." : "Schedule posted text sent to " + sent + " employees.", weekStart, metadata: { selected: recipients.length, sent, failed, excluded: state.workers.filter((worker) => worker.active && worker.mobilePhone.trim()).length - recipients.length } });
+    const summary = failed ? "Schedule text sent to " + sent + " employees. Failed for " + failed + " employee" + (failed === 1 ? "" : "s") + detailText : "Schedule text sent to " + sent + " employees.";
+    showToast(summary, failed ? "warn" : "good", failed ? 16000 : 10000);
+    addActivityLog({ category: "text", actionType: "schedule_posted_text_sent", message: summary, weekStart, metadata: { selected: recipients.length, sent, failed, failures: failureDetails, excluded: state.workers.filter((worker) => worker.active && normalizeSmsPhone(worker.mobilePhone).usable).length - recipients.length } });
+    if (failureDetails.length) await showDialogMessage("Schedule text sent to " + sent + " employees. Failed for " + failed + " employee" + (failed === 1 ? "" : "s") + ":\n\n" + failureDetails.join("\n"));
   } catch (error) {
     showError("Schedule posted text could not be sent.", error);
     addActivityLog({ category: "text", actionType: "schedule_posted_text_failed", message: "Schedule posted text failed.", weekStart, metadata: { error: error instanceof Error ? error.message : String(error) } });
   }
+}
+
+function normalizeSmsPhone(value: string): SmsPhoneCheck {
+  const raw = String(value || "").trim();
+  if (!raw) return { raw, normalized: "", usable: false, reason: "Missing phone number" };
+  const plusCleaned = raw.replace(/[^\d+]/g, "");
+  if (/^\+1\d{10}$/.test(plusCleaned)) return { raw, normalized: plusCleaned, usable: true, reason: "" };
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length === 10) return { raw, normalized: "+1" + digits, usable: true, reason: "" };
+  if (digits.length === 11 && digits.startsWith("1")) return { raw, normalized: "+" + digits, usable: true, reason: "" };
+  return { raw, normalized: "", usable: false, reason: "Invalid phone number" };
+}
+
+function scheduleTextPhoneLabel(phone: SmsPhoneCheck): string {
+  return phone.raw && phone.raw !== phone.normalized ? phone.raw + " -> " + phone.normalized : phone.normalized;
+}
+
+function parseSchedulePostedResults(result: Record<string, unknown>): SchedulePostedSendResult[] {
+  if (Array.isArray(result.results)) return result.results.filter((row): row is SchedulePostedSendResult => Boolean(row && typeof row === "object"));
+  if (!Array.isArray(result.errors)) return [];
+  return result.errors
+    .filter((row): row is Record<string, unknown> => Boolean(row && typeof row === "object"))
+    .map((row) => ({ name: String(row.employee || row.name || "Employee"), success: false, error: String(row.message || row.error || "Unknown SMS error.") }));
 }
 
 function renderSchedulePostedMessage(weekStart: string): string {

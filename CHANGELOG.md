@@ -3,6 +3,7 @@
 ## 1.10.22 - 2026-07-22
 
 - Added a post-push schedule text workflow with editable message and selectable employee recipients.
+- Improved schedule posted text sending with phone normalization, disabled invalid recipients, and per-employee failure reasons.
 - Added a repush warning before replacing an already published employee-domain schedule.
 - Added an Activity Log section with filters and password-protected clearing.
 - Password-protected enabling SMS reminders and sending test SMS messages.
