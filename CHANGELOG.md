@@ -4,6 +4,7 @@
 
 - Added a follow-up Supabase migration to fix ambiguous `local_worker_id` references in employee sync RPCs.
 - Updated the fresh Supabase schema so employee sync, employee login lookup, and calendar-token reset functions assign returned columns safely.
+- Added Supabase function configuration so the employee calendar feed can be opened by calendar apps without auth headers while still requiring a private calendar token.
 
 ## 1.10.23 - 2026-07-31
 

@@ -260,6 +260,31 @@ Use this request body:
 
 The function uses the deadline settings saved in manager cloud state. After changing deadline settings in the desktop app, click **Save Deadline Settings** while Supabase is configured so the Edge Function can read the newest settings while the app is closed.
 
+### Employee Calendar Feed Edge Function
+
+Employee calendar subscriptions are served by:
+
+`supabase/functions/employee-calendar-feed/index.ts`
+
+Calendar apps such as Apple Calendar, Google Calendar, Outlook, and Android calendar apps open subscription URLs without Supabase authorization headers. For that reason, only this function has JWT verification disabled in:
+
+`supabase/config.toml`
+
+```toml
+[functions.employee-calendar-feed]
+verify_jwt = false
+```
+
+Do not disable JWT verification globally. The calendar feed remains protected by each employee's private, unguessable calendar token. Missing, invalid, revoked, or inactive employee tokens return a not-found response, and valid feeds only include that employee's own scheduled shifts.
+
+Deploy the calendar feed after linking the Supabase project:
+
+```bash
+supabase functions deploy employee-calendar-feed
+```
+
+The config file handles `verify_jwt = false`; no `--no-verify-jwt` flag is needed when deploying with the Supabase CLI from this project folder.
+
 ### Configure the Phone Form
 
 ### Required 1.10.14 Published Schedule Update
