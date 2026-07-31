@@ -18,15 +18,7 @@ const TRANSLATIONS = {
     noSchedulePosted: "No schedule has been posted for this week yet.",
     notScheduled: "You are not scheduled for any shifts this week.",
     myScheduledDaysTitle: "My Scheduled Days This Week",
-    calendarSubscription: "Calendar Subscription",
-    subscribeCalendar: "Subscribe to My Schedule Calendar",
-    privateCalendarLink: "Private subscription link",
-    copyLink: "Copy Link",
-    openCalendarLink: "Open Calendar Link",
-    downloadMyShifts: "Download My Shifts Calendar File",
-    calendarWarning: "This link is private. Anyone with this link can see your scheduled shifts.",
-    calendarLinkMissing: "Calendar link is not available yet. Ask your lead to sync employees.",
-    calendarLinkCopied: "Calendar link copied.",
+    downloadMyShifts: "Download My Shift Calendar File",
     scheduleLoadFailed: "Schedule could not be loaded. Please try again.",
     openShift: "Open",
     closeShift: "Close",
@@ -155,8 +147,6 @@ const scheduleWeek = document.getElementById("scheduleWeek");
 const myScheduleWeek = document.getElementById("myScheduleWeek");
 const postedSchedule = document.getElementById("postedSchedule");
 const mySchedule = document.getElementById("mySchedule");
-const calendarSubscriptionPanel = document.getElementById("calendarSubscriptionPanel");
-const calendarLink = document.getElementById("calendarLink");
 const message = document.getElementById("message");
 const daysContainer = document.getElementById("days");
 const languageButtons = document.querySelectorAll("[data-language]");
@@ -165,9 +155,6 @@ const availabilityTab = document.getElementById("availabilityTab");
 const scheduleTab = document.getElementById("scheduleTab");
 const myScheduleTab = document.getElementById("myScheduleTab");
 const logoutButton = document.getElementById("logoutButton");
-const showCalendarSubscription = document.getElementById("showCalendarSubscription");
-const copyCalendarLink = document.getElementById("copyCalendarLink");
-const openCalendarLink = document.getElementById("openCalendarLink");
 const downloadMyShiftsIcs = document.getElementById("downloadMyShiftsIcs");
 let verifiedCode = "";
 let verifiedEmployee = null;
@@ -240,21 +227,6 @@ myScheduleTab.addEventListener("click", () => {
 logoutButton.addEventListener("click", resetLogin);
 scheduleWeek.addEventListener("change", loadPublishedSchedule);
 myScheduleWeek.addEventListener("change", loadMySchedule);
-showCalendarSubscription.addEventListener("click", () => {
-  calendarSubscriptionPanel.hidden = !calendarSubscriptionPanel.hidden;
-  updateCalendarSubscriptionLink();
-});
-copyCalendarLink.addEventListener("click", async () => {
-  const link = updateCalendarSubscriptionLink();
-  if (!link) return showMessage(t("calendarLinkMissing"));
-  await copyText(link);
-  showMessage(t("calendarLinkCopied"));
-});
-openCalendarLink.addEventListener("click", () => {
-  const link = updateCalendarSubscriptionLink();
-  if (!link) return showMessage(t("calendarLinkMissing"));
-  window.open(link, "_blank", "noopener");
-});
 downloadMyShiftsIcs.addEventListener("click", downloadSelectedWeekCalendarFile);
 
 function resetLogin() {
@@ -268,8 +240,6 @@ function resetLogin() {
   activeSiteSection = "availability";
   schedulePanel.hidden = true;
   mySchedulePanel.hidden = true;
-  calendarSubscriptionPanel.hidden = true;
-  calendarLink.value = "";
   showPanel(loginPanel);
   updateSiteTabs();
   showMessage("");
@@ -340,8 +310,6 @@ function showSiteSection(section) {
   if (section === "availability") {
     showPanel(availabilityPanel);
   } else {
-    calendarSubscriptionPanel.hidden = true;
-    if (section === "mySchedule") updateCalendarSubscriptionLink();
     showMessage("");
   }
 }
@@ -423,65 +391,80 @@ function renderPostedShift(shift, label) {
 
 function renderMySchedule(schedule, week) {
   const days = orderedPostedScheduleDays(schedule, week);
-  const workerId = verifiedEmployee?.localWorkerId || "";
-  const rows = [];
-  days.forEach((day) => {
-    [["open", t("openShift")], ["close", t("closeShift")]].forEach(([shiftKey, label]) => {
-      const assigned = Array.isArray(day.shifts?.[shiftKey]?.assigned) ? day.shifts[shiftKey].assigned : [];
-      assigned.filter((worker) => worker.id === workerId).forEach((worker) => {
-        rows.push({ day, label, worker });
-      });
-    });
-  });
+  const rows = myScheduleRowsForDays(days);
   myScheduleRows = rows.map((row) => ({ ...row, week }));
   mySchedule.innerHTML = '<div class="posted-week"><strong>' + t("weekOfSchedule") + " " + formatWeek(mondayWeekStart(week), currentLocale()) + '</strong></div>' + (rows.length ? rows.map(({ day, label, worker }) => '<article class="posted-day"><h2>' + escapeHtml(tDay(day.day) || day.day) + '</h2><p>' + escapeHtml(formatWeek(day.date, currentLocale())) + '</p><section class="posted-shift"><h3>' + escapeHtml(label) + '</h3><div class="posted-worker"><strong>' + escapeHtml(worker.name || verifiedEmployee.name || "Employee") + '</strong><span>' + escapeHtml(worker.start || "") + ' - ' + escapeHtml(worker.end || "") + '</span>' + (worker.position ? '<em>' + escapeHtml(worker.position) + '</em>' : '') + '</div></section></article>').join("") : '<div class="schedule-empty">' + t("notScheduled") + '</div>');
 }
 
-function updateCalendarSubscriptionLink() {
-  const token = verifiedEmployee?.calendarToken || "";
-  const config = window.HABANEROS_SUPABASE || {};
-  const link = token && config.url ? config.url.replace(/\/$/, "") + "/functions/v1/employee-calendar-feed?token=" + encodeURIComponent(token) : "";
-  calendarLink.value = link;
-  return link;
+function myScheduleRowsForDays(days) {
+  const rows = [];
+  days.forEach((day) => {
+    [["open", t("openShift")], ["close", t("closeShift")]].forEach(([shiftKey, label]) => {
+      const assigned = Array.isArray(day.shifts?.[shiftKey]?.assigned) ? day.shifts[shiftKey].assigned : [];
+      assigned.filter((worker) => employeeMatchesWorker(worker)).forEach((worker) => rows.push({ day, label, worker }));
+    });
+  });
+  return rows;
 }
 
-async function copyText(value) {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(value);
-    return;
-  }
-  window.prompt("Copy this link:", value);
+function employeeMatchesWorker(worker) {
+  const employeeIds = [verifiedEmployee?.localWorkerId, verifiedEmployee?.id].map(normalizeMatchValue).filter(Boolean);
+  const workerIds = [worker?.id, worker?.localWorkerId, worker?.local_worker_id, worker?.workerId, worker?.employeeId].map(normalizeMatchValue).filter(Boolean);
+  if (workerIds.some((id) => employeeIds.includes(id))) return true;
+  return normalizeMatchValue(worker?.name) && normalizeMatchValue(worker?.name) === normalizeMatchValue(verifiedEmployee?.name);
+}
+
+function normalizeMatchValue(value) {
+  return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 function downloadSelectedWeekCalendarFile() {
-  const ics = buildMyScheduleIcs(myScheduleRows);
+  const selectedWeek = mondayWeekStart(myScheduleWeek.value || scheduleWeeks()[1].value);
+  const rows = myScheduleRows.filter((row) => mondayWeekStart(row.week) === selectedWeek);
+  if (!rows.length) return showMessage(t("notScheduled"));
+  const ics = buildMyScheduleIcs(rows, selectedWeek);
   const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = "habaneros-my-shifts.ics";
+  link.download = "habaneros-my-shifts-week-of-" + selectedWeek + ".ics";
+  link.style.display = "none";
+  document.body.appendChild(link);
   link.click();
-  URL.revokeObjectURL(url);
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function buildMyScheduleIcs(rows) {
+function buildMyScheduleIcs(rows, selectedWeek) {
   const stamp = icsStamp(new Date());
-  const events = rows.map(({ day, label, worker, week }) => {
+  const events = rows.flatMap(({ day, label, worker, week }) => {
     const start = localDateTime(day.date, worker.start || "08:00");
     const end = localDateTime(day.date, worker.end || "08:00", start);
     const uid = "habaneros-download-" + (verifiedEmployee?.localWorkerId || "employee") + "-" + day.date + "-" + (worker.start || "") + "-" + (worker.end || "") + "@habaneros-scheduler";
     const description = ["Position: " + (worker.position || label), "Week of " + formatWeek(mondayWeekStart(week), currentLocale()), "Published from Habaneros Scheduler"].join("\\n");
-    return ["BEGIN:VEVENT", "UID:" + uid, "DTSTAMP:" + stamp, "SUMMARY:Habaneros Shift", "LOCATION:Habaneros Mexican Food", "DESCRIPTION:" + icsText(description), "DTSTART;TZID=America/Los_Angeles:" + start.text, "DTEND;TZID=America/Los_Angeles:" + end.text, "END:VEVENT"].join("\r\n");
-  }).join("\r\n");
-  return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Habaneros Scheduler//Employee Calendar//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH", "X-WR-CALNAME:Habaneros Work Schedule", "X-WR-TIMEZONE:America/Los_Angeles", events, "END:VCALENDAR"].filter(Boolean).join("\r\n");
+    return ["BEGIN:VEVENT", "UID:" + uid, "DTSTAMP:" + stamp, "SUMMARY:Habaneros Shift", "LOCATION:Habaneros Mexican Food", "DESCRIPTION:" + icsText(description), "DTSTART;TZID=America/Los_Angeles:" + start.text, "DTEND;TZID=America/Los_Angeles:" + end.text, "BEGIN:VALARM", "TRIGGER:-PT1H", "ACTION:DISPLAY", "DESCRIPTION:Habaneros shift reminder", "END:VALARM", "END:VEVENT"];
+  });
+  return serializeIcs(["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Habaneros Scheduler//Employee Calendar//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH", "X-WR-CALNAME:Habaneros Work Schedule", "X-WR-TIMEZONE:America/Los_Angeles", "REFRESH-INTERVAL;VALUE=DURATION:PT1H", "X-PUBLISHED-TTL:PT1H", "X-HABANEROS-SHIFT-COUNT:" + rows.length, "X-HABANEROS-EMPLOYEE-NAME:" + icsText(verifiedEmployee?.name || "Employee"), ...(events.length ? losAngelesTimezoneBlock() : []), ...events, "END:VCALENDAR"]);
 }
 
 function localDateTime(dateValue, timeValue, previous) {
   const date = parseLocalDate(dateValue);
-  const [hours, minutes] = String(timeValue || "00:00").split(":").map(Number);
-  date.setHours(hours || 0, minutes || 0, 0, 0);
+  const parsedTime = parseTimeValue(timeValue);
+  date.setHours(parsedTime.hours, parsedTime.minutes, 0, 0);
   if (previous && date <= previous.date) date.setDate(date.getDate() + 1);
   return { date, text: date.getFullYear() + String(date.getMonth() + 1).padStart(2, "0") + String(date.getDate()).padStart(2, "0") + "T" + String(date.getHours()).padStart(2, "0") + String(date.getMinutes()).padStart(2, "0") + "00" };
+}
+
+function parseTimeValue(value) {
+  const text = String(value || "00:00").trim();
+  const match = text.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?$/i);
+  if (!match) return { hours: 0, minutes: 0 };
+  let hours = Number(match[1]) || 0;
+  const minutes = Number(match[2] || "0") || 0;
+  const meridiem = (match[3] || "").toUpperCase();
+  if (meridiem === "PM" && hours < 12) hours += 12;
+  if (meridiem === "AM" && hours === 12) hours = 0;
+  return { hours: Math.max(0, Math.min(23, hours)), minutes: Math.max(0, Math.min(59, minutes)) };
 }
 
 function icsStamp(date) {
@@ -490,6 +473,26 @@ function icsStamp(date) {
 
 function icsText(value) {
   return String(value || "").replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
+}
+
+function serializeIcs(lines) {
+  return lines.flatMap(foldIcsLine).join("\r\n") + "\r\n";
+}
+
+function foldIcsLine(line) {
+  const text = String(line || "");
+  if (text.length <= 75) return [text];
+  const folded = [text.slice(0, 75)];
+  let remaining = text.slice(75);
+  while (remaining.length) {
+    folded.push(" " + remaining.slice(0, 74));
+    remaining = remaining.slice(74);
+  }
+  return folded;
+}
+
+function losAngelesTimezoneBlock() {
+  return ["BEGIN:VTIMEZONE", "TZID:America/Los_Angeles", "X-LIC-LOCATION:America/Los_Angeles", "BEGIN:DAYLIGHT", "TZOFFSETFROM:-0800", "TZOFFSETTO:-0700", "TZNAME:PDT", "DTSTART:19700308T020000", "RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU", "END:DAYLIGHT", "BEGIN:STANDARD", "TZOFFSETFROM:-0700", "TZOFFSETTO:-0800", "TZNAME:PST", "DTSTART:19701101T020000", "RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU", "END:STANDARD", "END:VTIMEZONE"];
 }
 
 function scheduleWeeks(today = new Date()) {

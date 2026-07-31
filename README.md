@@ -260,30 +260,13 @@ Use this request body:
 
 The function uses the deadline settings saved in manager cloud state. After changing deadline settings in the desktop app, click **Save Deadline Settings** while Supabase is configured so the Edge Function can read the newest settings while the app is closed.
 
-### Employee Calendar Feed Edge Function
+### Employee Shift Calendar Download
 
-Employee calendar subscriptions are served by:
+The employee website no longer shows calendar subscription links. Employees can log in, open **My Scheduled Days**, choose Last Week, Current Week, or Next Week, and click **Download My Shift Calendar File**.
 
-`supabase/functions/employee-calendar-feed/index.ts`
+The downloaded `.ics` file contains only the logged-in employee's shifts for the selected week, uses America/Los_Angeles times, and includes a one-hour reminder on each shift event. If the employee has no shifts for the selected week, the website shows `You are not scheduled for any shifts this week.` and does not download an empty file.
 
-Calendar apps such as Apple Calendar, Google Calendar, Outlook, and Android calendar apps open subscription URLs without Supabase authorization headers. For that reason, only this function has JWT verification disabled in:
-
-`supabase/config.toml`
-
-```toml
-[functions.employee-calendar-feed]
-verify_jwt = false
-```
-
-Do not disable JWT verification globally. The calendar feed remains protected by each employee's private, unguessable calendar token. Missing, invalid, revoked, or inactive employee tokens return a not-found response, and valid feeds only include that employee's own scheduled shifts.
-
-Deploy the calendar feed after linking the Supabase project:
-
-```bash
-supabase functions deploy employee-calendar-feed
-```
-
-The config file handles `verify_jwt = false`; no `--no-verify-jwt` flag is needed when deploying with the Supabase CLI from this project folder.
+The older `employee-calendar-feed` Edge Function and `calendar_token` database columns can remain deployed for compatibility, but the current employee website and admin app no longer link to or require calendar subscriptions. No Supabase cleanup migration is required.
 
 ### Configure the Phone Form
 

@@ -5,6 +5,10 @@
 - Added a follow-up Supabase migration to fix ambiguous `local_worker_id` references in employee sync RPCs.
 - Updated the fresh Supabase schema so employee sync, employee login lookup, and calendar-token reset functions assign returned columns safely.
 - Added Supabase function configuration so the employee calendar feed can be opened by calendar apps without auth headers while still requiring a private calendar token.
+- Improved employee calendar subscription links and `.ics` output for iPhone Calendar verification, including direct Functions URLs, Apple-compatible headers, timezone metadata, CRLF output, folded lines, and AM/PM time parsing.
+- Improved employee calendar feed runtime diagnostics so missing secrets and Supabase lookup failures return safe plain-text reasons while valid tokens still return `.ics` content.
+- Fixed employee calendar event matching and one-time `.ics` downloads so subscribed calendars and downloaded files include the same shifts shown in My Scheduled Days, with shift-count debug metadata and one-hour reminders.
+- Removed employee calendar subscription UI and admin calendar-link management, leaving only the manual **Download My Shift Calendar File** workflow for logged-in employees.
 
 ## 1.10.23 - 2026-07-31
 
