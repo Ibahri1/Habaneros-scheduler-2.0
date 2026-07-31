@@ -2,18 +2,31 @@ import { AvailabilitySubmission, CloudConfig, DAYS, DayName, ShiftAvailabilityMa
 import { callSupabaseRpc } from "./supabaseClient";
 
 interface SubmissionRow { id: string; employee_id: string; local_worker_id: string; employee_name: string; week_start: string; available_days: DayName[]; shift_availability: ShiftAvailabilityMap | null; submitted_at: string; status: SubmissionStatus; action_at: string | null; manager_notes: string | null; }
+interface EmployeeSyncRow { local_worker_id: string; calendar_token: string; }
 
 export class AvailabilityService {
   async test(config: CloudConfig): Promise<void> {
     await callSupabaseRpc(config, "manager_list_availability_submissions", { p_status: "pending" });
   }
 
-  async syncEmployees(config: CloudConfig, workers: Worker[]): Promise<number> {
+  async syncEmployees(config: CloudConfig, workers: Worker[]): Promise<EmployeeSyncRow[]> {
     const eligible = workers.filter((worker) => /^\d{4}$/.test(worker.employeeCode));
+    const rows: EmployeeSyncRow[] = [];
     for (const worker of eligible) {
-      await callSupabaseRpc(config, "manager_upsert_employee", { p_local_worker_id: worker.id, p_name: worker.name, p_employee_code: worker.employeeCode, p_active: worker.active, p_no_hour_limits: worker.noHourLimits, p_mobile_phone: worker.mobilePhone || "" });
+      const result = await callSupabaseRpc<EmployeeSyncRow[]>(config, "manager_upsert_employee", { p_local_worker_id: worker.id, p_name: worker.name, p_employee_code: worker.employeeCode, p_active: worker.active, p_no_hour_limits: worker.noHourLimits, p_mobile_phone: worker.mobilePhone || "", p_calendar_token: worker.calendarToken || "" });
+      if (result[0]) rows.push(result[0]);
     }
-    return eligible.length;
+    return rows;
+  }
+
+  async deactivateEmployee(config: CloudConfig, localWorkerId: string): Promise<void> {
+    await callSupabaseRpc(config, "manager_deactivate_employee", { p_local_worker_id: localWorkerId });
+  }
+
+  async resetEmployeeCalendarToken(config: CloudConfig, localWorkerId: string): Promise<string> {
+    const rows = await callSupabaseRpc<Array<{ calendar_token: string }>>(config, "manager_reset_employee_calendar_token", { p_local_worker_id: localWorkerId });
+    if (!rows[0]?.calendar_token) throw new Error("Supabase did not return a calendar token.");
+    return rows[0].calendar_token;
   }
 
   async list(config: CloudConfig, status: SubmissionStatus | null): Promise<AvailabilitySubmission[]> {

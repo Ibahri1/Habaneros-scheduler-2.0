@@ -656,7 +656,9 @@ async function addWorker(event: Event): Promise<void> {
     try {
       if (!cloudConfig.supabaseUrl || !cloudConfig.anonKey) throw new Error("Supabase is not configured.");
       console.info("[AddEmployee] Supabase sync started");
-      await window.habanerosDesktop.syncCloudEmployees(state.workers);
+      const syncResult = await window.habanerosDesktop.syncCloudEmployees(state.workers);
+      applyCalendarTokensFromSyncResult(syncResult);
+      if (newWorker.calendarToken) await saveStateAndRender();
       console.info("[AddEmployee] sync result:", "success");
       console.info("[AddEmployee] employee count after Supabase sync:", state.workers.length);
       els.cloudStatus.textContent = "Employees synced";
@@ -762,6 +764,8 @@ function renderWorkers(): void {
   els.workersList.querySelectorAll<HTMLButtonElement>("[data-select-worker]").forEach((button) => button.addEventListener("click", () => void selectWorker(button.dataset.selectWorker || "")));
   els.workersList.querySelectorAll<HTMLButtonElement>("[data-toggle-active]").forEach((button) => button.addEventListener("click", () => void toggleWorkerActive(button.dataset.toggleActive!)));
   els.workersList.querySelectorAll<HTMLButtonElement>("[data-delete]").forEach((button) => button.addEventListener("click", () => void deleteWorker(button.dataset.delete!)));
+  els.workersList.querySelectorAll<HTMLButtonElement>("[data-copy-calendar]").forEach((button) => button.addEventListener("click", () => void copyEmployeeCalendarLink(button.dataset.copyCalendar || "")));
+  els.workersList.querySelectorAll<HTMLButtonElement>("[data-reset-calendar]").forEach((button) => button.addEventListener("click", () => void resetEmployeeCalendarLink(button.dataset.resetCalendar || "")));
   els.workersList.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("[data-edit]").forEach((input) => input.addEventListener("change", () => void editWorker(input)));
   els.workersList.querySelectorAll<HTMLSelectElement>("[data-availability-draft]").forEach((input) => input.addEventListener("change", () => updateAvailabilityDraft(input)));
   els.workersList.querySelectorAll<HTMLButtonElement>("[data-save-availability]").forEach((button) => button.addEventListener("click", () => void saveSelectedWorkerAvailability(button.dataset.saveAvailability || "")));
@@ -821,7 +825,52 @@ function renderSelectedWorkerProfile(worker: Worker): string {
   const phoneTag = worker.mobilePhone ? '<span class="tag good">Phone set</span>' : '<span class="tag warn">No phone</span>';
   const statusClass = hasAvailabilityEntered(worker) ? 'availability-entered' : 'availability-missing';
   const availabilityEditors = DAYS.map((day) => '<label class="worker-availability-day"><span>' + day + '</span><select data-availability-draft="' + day + '"><option value="Open" ' + selected(availabilityDraft[day] || 'Unavailable', 'Open') + '>Available for Open</option><option value="Close" ' + selected(availabilityDraft[day] || 'Unavailable', 'Close') + '>Available for Close</option><option value="Both" ' + selected(availabilityDraft[day] || 'Unavailable', 'Both') + '>Available for Both</option><option value="Unavailable" ' + selected(availabilityDraft[day] || 'Unavailable', 'Unavailable') + '>Not Available on ' + day + '</option></select></label>').join("");
-  return '<article class="employee-profile ' + statusClass + '"><div class="employee-profile-head"><div><h3>' + escapeHtml(worker.name) + '</h3><div class="tag-row">' + activeTag + leadTag + phoneTag + availabilityStatusTag(worker) + (availabilityDraftDirty ? '<span class="tag warn">Unsaved availability changes</span>' : '') + '</div></div><div class="card-actions"><button class="secondary" type="button" data-toggle-active="' + worker.id + '">' + (worker.active ? 'Deactivate' : 'Activate') + '</button><button class="secondary danger" type="button" data-delete="' + worker.id + '">Delete</button></div></div><div class="employee-profile-grid"><section class="employee-profile-section"><h4>Basic Info</h4><div class="profile-field-grid"><label>Name <input data-edit="' + worker.id + '" data-field="name" type="text" value="' + escapeHtml(worker.name) + '"></label><label>Position <input data-edit="' + worker.id + '" data-field="position" type="text" value="' + escapeHtml(worker.position) + '"></label><label>Employee code <input data-edit="' + worker.id + '" data-field="employeeCode" type="text" inputmode="numeric" pattern="\\d{4}" maxlength="4" value="' + escapeHtml(worker.employeeCode) + '"></label><label>Mobile Phone Number <input data-edit="' + worker.id + '" data-field="mobilePhone" type="tel" value="' + escapeHtml(worker.mobilePhone || '') + '" placeholder="+15551234567"></label><label>Lead <select data-edit="' + worker.id + '" data-field="isManager"><option value="false" ' + selected(String(worker.isManager), 'false') + '>No</option><option value="true" ' + selected(String(worker.isManager), 'true') + '>Yes</option></select></label></div></section><section class="employee-profile-section"><h4>Scheduling Defaults</h4><div class="profile-field-grid"><label>Skill Rating <input data-edit="' + worker.id + '" data-field="skillRating" type="number" min="1" max="10" step="1" value="' + worker.skillRating + '"></label><label class="check-row"><input data-edit="' + worker.id + '" data-field="noHourLimits" type="checkbox" ' + checked(worker.noHourLimits) + '> No Hour Limits</label><label>Preferred Weekly Hours <input data-edit="' + worker.id + '" data-field="preferredWeeklyHours" type="number" min="0" max="168" step="0.5" value="' + worker.preferredWeeklyHours + '" ' + disabled(worker.noHourLimits) + '></label><label>Maximum Weekly Hours <input data-edit="' + worker.id + '" data-field="maxWeeklyHours" type="number" min="0" max="168" step="0.5" value="' + worker.maxWeeklyHours + '" ' + disabled(worker.noHourLimits) + '></label><label>Default Open Start <input data-worker-time="' + worker.id + '" data-shift="open" data-part="start" type="time" value="' + worker.shiftTimes.open.start + '"></label><label>Default Open End <input data-worker-time="' + worker.id + '" data-shift="open" data-part="end" type="time" value="' + worker.shiftTimes.open.end + '"></label><label>Default Close Start <input data-worker-time="' + worker.id + '" data-shift="close" data-part="start" type="time" value="' + worker.shiftTimes.close.start + '"></label><label>Default Close End <input data-worker-time="' + worker.id + '" data-shift="close" data-part="end" type="time" value="' + worker.shiftTimes.close.end + '"></label></div></section><section class="employee-profile-section full"><h4>Availability</h4><p class="meta">Change multiple days first, then save availability when ready.</p><div class="employee-availability-grid">' + availabilityEditors + '</div><div class="employee-availability-actions"><button class="primary" data-save-availability="' + worker.id + '" type="button">Save Employee Availability</button><button class="secondary" data-cancel-availability="' + worker.id + '" type="button">Cancel</button></div></section><section class="employee-profile-section full"><h4>Notes</h4><label>Notes <textarea data-edit="' + worker.id + '" data-field="notes" rows="2">' + escapeHtml(worker.notes) + '</textarea></label></section></div></article>';
+  return '<article class="employee-profile ' + statusClass + '"><div class="employee-profile-head"><div><h3>' + escapeHtml(worker.name) + '</h3><div class="tag-row">' + activeTag + leadTag + phoneTag + availabilityStatusTag(worker) + (availabilityDraftDirty ? '<span class="tag warn">Unsaved availability changes</span>' : '') + '</div></div><div class="card-actions"><button class="secondary" type="button" data-toggle-active="' + worker.id + '">' + (worker.active ? 'Deactivate' : 'Activate') + '</button><button class="secondary danger" type="button" data-delete="' + worker.id + '">Delete</button></div></div><div class="employee-profile-grid"><section class="employee-profile-section"><h4>Basic Info</h4><div class="profile-field-grid"><label>Name <input data-edit="' + worker.id + '" data-field="name" type="text" value="' + escapeHtml(worker.name) + '"></label><label>Position <input data-edit="' + worker.id + '" data-field="position" type="text" value="' + escapeHtml(worker.position) + '"></label><label>Employee code <input data-edit="' + worker.id + '" data-field="employeeCode" type="text" inputmode="numeric" pattern="\\d{4}" maxlength="4" value="' + escapeHtml(worker.employeeCode) + '"></label><label>Mobile Phone Number <input data-edit="' + worker.id + '" data-field="mobilePhone" type="tel" value="' + escapeHtml(worker.mobilePhone || '') + '" placeholder="+15551234567"></label><label>Lead <select data-edit="' + worker.id + '" data-field="isManager"><option value="false" ' + selected(String(worker.isManager), 'false') + '>No</option><option value="true" ' + selected(String(worker.isManager), 'true') + '>Yes</option></select></label></div></section><section class="employee-profile-section"><h4>Scheduling Defaults</h4><div class="profile-field-grid"><label>Skill Rating <input data-edit="' + worker.id + '" data-field="skillRating" type="number" min="1" max="10" step="1" value="' + worker.skillRating + '"></label><label class="check-row"><input data-edit="' + worker.id + '" data-field="noHourLimits" type="checkbox" ' + checked(worker.noHourLimits) + '> No Hour Limits</label><label>Preferred Weekly Hours <input data-edit="' + worker.id + '" data-field="preferredWeeklyHours" type="number" min="0" max="168" step="0.5" value="' + worker.preferredWeeklyHours + '" ' + disabled(worker.noHourLimits) + '></label><label>Maximum Weekly Hours <input data-edit="' + worker.id + '" data-field="maxWeeklyHours" type="number" min="0" max="168" step="0.5" value="' + worker.maxWeeklyHours + '" ' + disabled(worker.noHourLimits) + '></label><label>Default Open Start <input data-worker-time="' + worker.id + '" data-shift="open" data-part="start" type="time" value="' + worker.shiftTimes.open.start + '"></label><label>Default Open End <input data-worker-time="' + worker.id + '" data-shift="open" data-part="end" type="time" value="' + worker.shiftTimes.open.end + '"></label><label>Default Close Start <input data-worker-time="' + worker.id + '" data-shift="close" data-part="start" type="time" value="' + worker.shiftTimes.close.start + '"></label><label>Default Close End <input data-worker-time="' + worker.id + '" data-shift="close" data-part="end" type="time" value="' + worker.shiftTimes.close.end + '"></label></div></section>' + renderEmployeeCalendarAdmin(worker) + '<section class="employee-profile-section full"><h4>Availability</h4><p class="meta">Change multiple days first, then save availability when ready.</p><div class="employee-availability-grid">' + availabilityEditors + '</div><div class="employee-availability-actions"><button class="primary" data-save-availability="' + worker.id + '" type="button">Save Employee Availability</button><button class="secondary" data-cancel-availability="' + worker.id + '" type="button">Cancel</button></div></section><section class="employee-profile-section full"><h4>Notes</h4><label>Notes <textarea data-edit="' + worker.id + '" data-field="notes" rows="2">' + escapeHtml(worker.notes) + '</textarea></label></section></div></article>';
+}
+
+function renderEmployeeCalendarAdmin(worker: Worker): string {
+  const link = employeeCalendarFeedUrl(worker.calendarToken || "");
+  return '<section class="employee-profile-section full"><h4>Calendar Subscription Link</h4><p class="meta">Private calendar feed for this employee only. Anyone with this link can see this employee\'s scheduled shifts.</p>' +
+    (link ? '<div class="calendar-link-row"><input readonly value="' + escapeHtml(link) + '" aria-label="Calendar subscription link"><button class="secondary" data-copy-calendar="' + worker.id + '" type="button">Copy Link</button><button class="secondary danger" data-reset-calendar="' + worker.id + '" type="button">Reset Calendar Link</button></div>' : '<div class="empty-state">Sync Employees to Supabase to create this employee\'s calendar link.</div>') +
+    '</section>';
+}
+
+function employeeCalendarFeedUrl(token: string): string {
+  if (!token || !cloudConfig.supabaseUrl) return "";
+  return cloudConfig.supabaseUrl.replace(/\/$/, "") + "/functions/v1/employee-calendar-feed?token=" + encodeURIComponent(token);
+}
+
+async function copyEmployeeCalendarLink(id: string): Promise<void> {
+  const worker = findWorker(id);
+  const link = worker ? employeeCalendarFeedUrl(worker.calendarToken || "") : "";
+  if (!link) { showToast("Sync Employees to create this calendar link first.", "warn", 7000); return; }
+  await copyText(link);
+  showToast("Calendar link copied.", "good", 5000);
+}
+
+async function resetEmployeeCalendarLink(id: string): Promise<void> {
+  const worker = findWorker(id);
+  if (!worker) return;
+  if (!await requireAdminActionPassword("Reset Calendar Link")) return;
+  if (!await confirmDialog("Reset this employee's calendar link? The old link will stop working.")) return;
+  try {
+    const result = await window.habanerosDesktop.resetEmployeeCalendarToken(worker.id);
+    if (!result.calendarToken) throw new Error("Supabase did not return a calendar token.");
+    worker.calendarToken = result.calendarToken;
+    await saveStateAndRender();
+    showToast("Calendar link reset.", "good", 7000);
+    addActivityLog({ category: "settings", actionType: "employee_calendar_link_reset", message: "Calendar link reset for " + worker.name, employeeName: worker.name, employeeId: worker.id, employeeCode: worker.employeeCode });
+  } catch (error) {
+    showError("Calendar link could not be reset.", error);
+  }
+}
+
+async function copyText(value: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+  window.prompt("Copy this link:", value);
 }
 
 function selected(current: string, value: string): string { return current === value ? "selected" : ""; }
@@ -909,7 +958,9 @@ async function toggleWorkerActive(id: string): Promise<void> {
 async function deleteWorker(id: string): Promise<void> {
   const worker = findWorker(id);
   if (!worker) return;
-  if (!await confirmDialog("Delete " + worker.name + "? This removes the employee profile and future schedules will no longer use this employee. Saved schedule history will stay saved.")) return;
+  if (!await requireAdminActionPassword("Delete Employee")) return;
+  if (!await confirmDialog("Are you sure you want to delete this employee?")) return;
+  const deletedWorker = { ...worker };
   state.workers = state.workers.filter((item) => item.id !== id);
   if (selectedWorkerId === id) {
     selectedWorkerId = "";
@@ -917,6 +968,20 @@ async function deleteWorker(id: string): Promise<void> {
   }
   state.schedule = null;
   await saveStateAndRender();
+  addActivityLog({ category: "settings", actionType: "employee_deleted", message: "Employee deleted: " + deletedWorker.name, employeeName: deletedWorker.name, employeeId: deletedWorker.id, employeeCode: deletedWorker.employeeCode });
+  await deactivateDeletedWorkerInSupabase(deletedWorker);
+}
+
+async function deactivateDeletedWorkerInSupabase(worker: Worker): Promise<void> {
+  if (!worker.id || !/^\d{4}$/.test(worker.employeeCode)) return;
+  try {
+    await window.habanerosDesktop.deactivateCloudEmployee(worker.id);
+    showToast("Employee deleted and removed from Supabase.", "good", 7000);
+  } catch (error) {
+    console.warn("Deleted employee could not be removed from Supabase.", error);
+    showToast("Employee deleted locally, but Supabase cleanup failed. Check Supabase settings; the employee may still be active online until cleanup succeeds.", "warn", 12000);
+    addActivityLog({ category: "settings", actionType: "employee_delete_supabase_failed", message: "Employee deletion Supabase cleanup failed: " + worker.name, employeeName: worker.name, employeeId: worker.id, employeeCode: worker.employeeCode, metadata: { error: error instanceof Error ? error.message : String(error) } });
+  }
 }
 
 async function editWorker(input: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement): Promise<void> {
@@ -1583,7 +1648,7 @@ function importCsv(content: string): ImportResult {
     const name = get("name") || get("employee name");
     if (!name.trim()) { skipped++; continue; }
     const isLead = yes(get("lead")) || yes(get("manager"));
-    const worker = normalizeWorker({ id: createId(), employeeCode: get("employee code"), mobilePhone: get("mobile phone") || get("mobile phone number") || get("phone") || get("phone number"), name, position: get("position") || "Crew", role: isLead ? "Lead" : "Crew", isManager: isLead, skillRating: Number(get("skill rating")) || 5, noHourLimits: yes(get("no hour limits")), maxWeeklyHours: Number(get("max weekly hours")) || 45, preferredWeeklyHours: Number(get("preferred weekly hours")) || 40, maxDays: 7, active: !no(get("active")), notes: get("notes"), availability: splitDays(get("available days")), shiftAvailability: splitShiftAvailability(get("shift availability")), shiftTimes: { open: { start: get("default open start"), end: get("default open end") }, close: { start: get("default close start"), end: get("default close end") } } }, state.rules);
+    const worker = normalizeWorker({ id: createId(), employeeCode: get("employee code"), mobilePhone: get("mobile phone") || get("mobile phone number") || get("phone") || get("phone number"), calendarToken: get("calendar token"), name, position: get("position") || "Crew", role: isLead ? "Lead" : "Crew", isManager: isLead, skillRating: Number(get("skill rating")) || 5, noHourLimits: yes(get("no hour limits")), maxWeeklyHours: Number(get("max weekly hours")) || 45, preferredWeeklyHours: Number(get("preferred weekly hours")) || 40, maxDays: 7, active: !no(get("active")), notes: get("notes"), availability: splitDays(get("available days")), shiftAvailability: splitShiftAvailability(get("shift availability")), shiftTimes: { open: { start: get("default open start"), end: get("default open end") }, close: { start: get("default close start"), end: get("default close end") } } }, state.rules);
     if (mergeWorker(worker)) imported++; else skipped++;
   }
   return { imported, skipped, messages: skipped ? [String(skipped) + " duplicate or invalid row(s) skipped."] : [] };
@@ -1664,9 +1729,19 @@ async function syncCloudEmployees(): Promise<void> {
     const missingCodes = state.workers.filter((worker) => !/^\d{4}$/.test(worker.employeeCode));
     if (missingCodes.length) { await showDialogMessage("Add a 4-digit code for every employee before syncing. Missing: " + missingCodes.map((worker) => worker.name).join(", ")); return; }
     const result = await window.habanerosDesktop.syncCloudEmployees(state.workers);
+    applyCalendarTokensFromSyncResult(result);
+    if ((result as { rows?: unknown[] }).rows?.length) await saveStateAndRender();
     els.cloudStatus.textContent = "Employees synced";
     await showDialogMessage(result.message);
   } catch (error) { showError("Employees could not be synced.", error); }
+}
+
+function applyCalendarTokensFromSyncResult(result: unknown): void {
+  const rows = (result as { rows?: Array<{ local_worker_id?: string; calendar_token?: string }> }).rows || [];
+  rows.forEach((row) => {
+    const worker = state.workers.find((item) => item.id === row.local_worker_id);
+    if (worker && row.calendar_token) worker.calendarToken = row.calendar_token;
+  });
 }
 
 async function refreshSubmissions(): Promise<void> {

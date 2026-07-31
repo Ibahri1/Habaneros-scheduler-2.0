@@ -147,6 +147,7 @@ export function normalizeWorker(worker: Partial<Worker> & { id: string; name: st
     id: worker.id,
     employeeCode: /^\d{4}$/.test(String(worker.employeeCode || "")) ? String(worker.employeeCode) : "",
     mobilePhone: String(worker.mobilePhone || "").trim(),
+    calendarToken: String(worker.calendarToken || "").trim(),
     name: String(worker.name || "Unnamed Worker"),
     position,
     role,

@@ -17,9 +17,11 @@
         <button id="languageSpanish" type="button" data-language="es">Español</button>
       </div>
       <h1 data-i18n="title">Employee Availability</h1>
-      <nav class="site-tabs" aria-label="Employee website sections">
+      <nav id="employeeNav" class="site-tabs" aria-label="Employee website sections" hidden>
         <button id="availabilityTab" class="active" type="button" data-i18n="availabilityTab">Submit Availability</button>
         <button id="scheduleTab" type="button" data-i18n="scheduleTab">View Schedule</button>
+        <button id="myScheduleTab" type="button" data-i18n="myScheduleTab">My Scheduled Days</button>
+        <button id="logoutButton" class="secondary" type="button" data-i18n="logout">Log Out</button>
       </nav>
     </header>
     <section id="loginPanel" data-availability-section>
@@ -52,6 +54,34 @@
       <label for="scheduleWeek" data-i18n="scheduleWeek">Schedule week</label>
       <select id="scheduleWeek"></select>
       <div id="postedSchedule" class="posted-schedule"></div>
+    </section>
+    <section id="mySchedulePanel" hidden>
+      <h2 data-i18n="myScheduledDaysTitle">My Scheduled Days This Week</h2>
+      <label for="myScheduleWeek" data-i18n="scheduleWeek">Schedule week</label>
+      <select id="myScheduleWeek"></select>
+      <div id="mySchedule" class="posted-schedule"></div>
+      <div class="calendar-subscription">
+        <h2 data-i18n="calendarSubscription">Calendar Subscription</h2>
+        <button id="showCalendarSubscription" type="button" data-i18n="subscribeCalendar">Subscribe to My Schedule Calendar</button>
+        <div id="calendarSubscriptionPanel" hidden>
+          <label for="calendarLink" data-i18n="privateCalendarLink">Private subscription link</label>
+          <input id="calendarLink" type="text" readonly>
+          <div class="calendar-actions">
+            <button id="copyCalendarLink" class="secondary" type="button" data-i18n="copyLink">Copy Link</button>
+            <button id="openCalendarLink" class="secondary" type="button" data-i18n="openCalendarLink">Open Calendar Link</button>
+            <button id="downloadMyShiftsIcs" class="secondary" type="button" data-i18n="downloadMyShifts">Download My Shifts Calendar File</button>
+          </div>
+          <p class="calendar-warning" data-i18n="calendarWarning">This link is private. Anyone with this link can see your scheduled shifts.</p>
+          <div class="calendar-instructions">
+            <h3>iPhone</h3>
+            <ol><li>Copy the calendar link.</li><li>Open Settings.</li><li>Calendar &gt; Accounts &gt; Add Account &gt; Other.</li><li>Add Subscribed Calendar.</li><li>Paste the link and save.</li></ol>
+            <h3>Google Calendar</h3>
+            <ol><li>Copy the calendar link.</li><li>Open Google Calendar on desktop.</li><li>Other calendars &gt; From URL.</li><li>Paste the link and add calendar.</li></ol>
+            <h3>Outlook</h3>
+            <ol><li>Copy the calendar link.</li><li>Open Outlook Calendar.</li><li>Add calendar &gt; Subscribe from web.</li><li>Paste the link.</li></ol>
+          </div>
+        </div>
+      </div>
     </section>
     <div id="message" role="status" aria-live="polite"></div>
   </main>

@@ -14,6 +14,46 @@
   color: #1d241e;
 }
 
+.calendar-subscription {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid #d6ded3;
+  border-radius: 8px;
+  background: #fbfcfa;
+}
+
+.calendar-actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.calendar-warning {
+  padding: 10px;
+  border-radius: 6px;
+  background: #fff5d8;
+  color: #805700;
+  font-weight: 800;
+}
+
+.calendar-instructions {
+  display: grid;
+  gap: 6px;
+  color: #536155;
+}
+
+.calendar-instructions h3 {
+  margin: 8px 0 0;
+  color: #263427;
+}
+
+.calendar-instructions ol {
+  margin: 0 0 0 18px;
+  padding: 0;
+}
+
 @media (prefers-color-scheme: dark) {
   .submission-week {
     background: #1f2a20;
@@ -23,5 +63,20 @@
 
   .submission-week strong {
     color: #ffffff;
+  }
+
+  .calendar-subscription {
+    background: #1f2a20;
+    border-color: #445244;
+  }
+
+  .calendar-warning {
+    background: #3a300f;
+    color: #ffd56a;
+  }
+
+  .calendar-instructions,
+  .calendar-instructions h3 {
+    color: #e7f0e4;
   }
 }

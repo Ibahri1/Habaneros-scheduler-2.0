@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.10.23 - 2026-07-31
+
+- Added a follow-up Supabase migration to safely drop/recreate employee RPCs whose return types changed during the employee login/calendar upgrade.
+- Added private employee calendar subscription tokens, admin calendar link copy/reset controls, and an employee calendar feed Edge Function.
+- Added employee website Calendar Subscription controls with copy/open instructions and a one-time selected-week `.ics` download.
+- Added admin password protection before employee deletion.
+- Added Supabase employee deactivation cleanup when an employee is deleted from the app.
+- Protected the employee website so availability and schedule pages are hidden until employee-code login succeeds.
+- Updated employee schedule viewing to default to Current Week and added a My Scheduled Days view filtered to the logged-in employee.
+- Added a Supabase migration for deleted employee cleanup, active-login rejection, and employee-authenticated published schedule lookup.
+
 ## 1.10.22 - 2026-07-22
 
 - Added a post-push schedule text workflow with editable message and selectable employee recipients.

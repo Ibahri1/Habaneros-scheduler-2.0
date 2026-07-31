@@ -53,6 +53,14 @@ if (!window.habanerosDesktop) {
       return { success: true, message: "Connected to Supabase." };
     },
     syncCloudEmployees: async (workers) => syncEmployees(readStorage(CLOUD_KEY, { supabaseUrl: "", anonKey: "" }), workers),
+    deactivateCloudEmployee: async (localWorkerId) => {
+      await callRpc(readStorage(CLOUD_KEY, { supabaseUrl: "", anonKey: "" }), "manager_deactivate_employee", { p_local_worker_id: localWorkerId });
+      return { success: true, message: "Employee removed from Supabase." };
+    },
+    resetEmployeeCalendarToken: async (localWorkerId) => {
+      const rows = await callRpc<Array<{ calendar_token: string }>>(readStorage(CLOUD_KEY, { supabaseUrl: "", anonKey: "" }), "manager_reset_employee_calendar_token", { p_local_worker_id: localWorkerId });
+      return { success: true, message: "Calendar link reset.", calendarToken: rows[0]?.calendar_token || "" };
+    },
     listAvailabilitySubmissions: async (status) => listSubmissions(readStorage(CLOUD_KEY, { supabaseUrl: "", anonKey: "" }), status),
     updateAvailabilitySubmission: async (input) => {
       await callRpc(readStorage(CLOUD_KEY, { supabaseUrl: "", anonKey: "" }), "manager_update_availability_submission", { p_submission_id: input.id, p_available_days: input.availableDays, p_shift_availability: input.shiftAvailability, p_status: input.status, p_manager_notes: input.managerNotes });
@@ -246,8 +254,12 @@ function importInBrowser(): Promise<{ canceled: boolean; fileName?: string; cont
 
 async function syncEmployees(config: CloudConfig, workers: Worker[]): Promise<{ success: boolean; message: string }> {
   const eligible = workers.filter((worker) => /^\d{4}$/.test(worker.employeeCode));
-  for (const worker of eligible) await callRpc(config, "manager_upsert_employee", { p_local_worker_id: worker.id, p_name: worker.name, p_employee_code: worker.employeeCode, p_active: worker.active, p_no_hour_limits: worker.noHourLimits, p_mobile_phone: worker.mobilePhone || "" });
-  return { success: true, message: eligible.length + " employee" + (eligible.length === 1 ? "" : "s") + " synced." };
+  const rows = [];
+  for (const worker of eligible) {
+    const result = await callRpc<Array<{ local_worker_id: string; calendar_token: string }>>(config, "manager_upsert_employee", { p_local_worker_id: worker.id, p_name: worker.name, p_employee_code: worker.employeeCode, p_active: worker.active, p_no_hour_limits: worker.noHourLimits, p_mobile_phone: worker.mobilePhone || "", p_calendar_token: worker.calendarToken || "" });
+    if (result[0]) rows.push(result[0]);
+  }
+  return { success: true, message: rows.length + " employee" + (rows.length === 1 ? "" : "s") + " synced.", rows } as { success: boolean; message: string };
 }
 
 interface SubmissionRow { id: string; employee_id: string; local_worker_id: string; employee_name: string; week_start: string; available_days: DayName[]; shift_availability: ShiftAvailabilityMap | null; submitted_at: string; status: SubmissionStatus; action_at: string | null; manager_notes: string | null; }
@@ -270,7 +282,7 @@ async function callRpc<T>(config: CloudConfig, functionName: string, body: Recor
 }
 
 function toCsv(payload: ExportPayload): string {
-  const rows = [["Name", "Employee Code", "Mobile Phone", "Position", "Lead", "Skill Rating", "No Hour Limits", "Active", "Max Weekly Hours", "Preferred Weekly Hours", "Available Days", "Shift Availability", "Default Open Start", "Default Open End", "Default Close Start", "Default Close End", "Notes"]];
-  for (const worker of payload.state.workers) rows.push([worker.name, worker.employeeCode, worker.mobilePhone || "", worker.position, worker.isManager ? "Yes" : "No", String(worker.skillRating), worker.noHourLimits ? "Yes" : "No", worker.active ? "Yes" : "No", String(worker.maxWeeklyHours), String(worker.preferredWeeklyHours), worker.availability.join(";"), Object.entries(worker.shiftAvailability).map(([day, shift]) => day + ":" + shift).join(";"), worker.shiftTimes.open.start, worker.shiftTimes.open.end, worker.shiftTimes.close.start, worker.shiftTimes.close.end, worker.notes]);
+  const rows = [["Name", "Employee Code", "Mobile Phone", "Calendar Token", "Position", "Lead", "Skill Rating", "No Hour Limits", "Active", "Max Weekly Hours", "Preferred Weekly Hours", "Available Days", "Shift Availability", "Default Open Start", "Default Open End", "Default Close Start", "Default Close End", "Notes"]];
+  for (const worker of payload.state.workers) rows.push([worker.name, worker.employeeCode, worker.mobilePhone || "", worker.calendarToken || "", worker.position, worker.isManager ? "Yes" : "No", String(worker.skillRating), worker.noHourLimits ? "Yes" : "No", worker.active ? "Yes" : "No", String(worker.maxWeeklyHours), String(worker.preferredWeeklyHours), worker.availability.join(";"), Object.entries(worker.shiftAvailability).map(([day, shift]) => day + ":" + shift).join(";"), worker.shiftTimes.open.start, worker.shiftTimes.open.end, worker.shiftTimes.close.start, worker.shiftTimes.close.end, worker.notes]);
   return rows.map((row) => row.map((value) => '"' + String(value).replaceAll('"', '""') + '"').join(",")).join("\n");
 }

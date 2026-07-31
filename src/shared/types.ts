@@ -17,6 +17,7 @@ export interface Worker {
   id: string;
   employeeCode: string;
   mobilePhone: string;
+  calendarToken: string;
   name: string;
   position: string;
   role: WorkerRole;
