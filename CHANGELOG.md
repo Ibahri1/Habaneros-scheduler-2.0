@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.10.26 - 2026-07-31
+
+- Added a follow-up Supabase migration to fix ambiguous `local_worker_id` references in employee sync RPCs.
+- Updated the fresh Supabase schema so employee sync, employee login lookup, and calendar-token reset functions assign returned columns safely.
+
 ## 1.10.23 - 2026-07-31
 
 - Added a follow-up Supabase migration to safely drop/recreate employee RPCs whose return types changed during the employee login/calendar upgrade.
