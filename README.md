@@ -262,7 +262,7 @@ The function uses the deadline settings saved in manager cloud state. After chan
 
 ### Employee Shift Calendar Download
 
-The employee website no longer shows calendar subscription links. Employees can log in, open **My Scheduled Days**, choose Last Week, Current Week, or Next Week, and click **Download My Shift Calendar File**.
+The employee website no longer shows calendar subscription links. Employees can log in, open **My Scheduled Days**, choose Last Week, Current Week, or Next Week, and click **Add to Calendar**.
 
 The downloaded `.ics` file contains only the logged-in employee's shifts for the selected week, uses America/Los_Angeles times, and includes a one-hour reminder on each shift event. If the employee has no shifts for the selected week, the website shows `You are not scheduled for any shifts this week.` and does not download an empty file.
 

@@ -18,7 +18,7 @@ const TRANSLATIONS = {
     noSchedulePosted: "No schedule has been posted for this week yet.",
     notScheduled: "You are not scheduled for any shifts this week.",
     myScheduledDaysTitle: "My Scheduled Days This Week",
-    downloadMyShifts: "Download My Shift Calendar File",
+    downloadMyShifts: "Add to Calendar",
     scheduleLoadFailed: "Schedule could not be loaded. Please try again.",
     openShift: "Open",
     closeShift: "Close",
