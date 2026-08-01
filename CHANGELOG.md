@@ -10,6 +10,7 @@
 - Fixed employee calendar event matching and one-time `.ics` downloads so subscribed calendars and downloaded files include the same shifts shown in My Scheduled Days, with shift-count debug metadata and one-hour reminders.
 - Removed employee calendar subscription UI and admin calendar-link management, leaving only the manual **Download My Shift Calendar File** workflow for logged-in employees.
 - Renamed the employee calendar download button to **Add to Calendar** while keeping the same one-time `.ics` download behavior.
+- Removed the visible **Employee Schedule Link** field from Availability Reminders and Edit Preferred Settings while preserving the internal saved URL for schedule posted texts.
 
 ## 1.10.23 - 2026-07-31
 

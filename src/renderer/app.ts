@@ -123,7 +123,7 @@ const els = {
   firstReminderMessage: byId<HTMLTextAreaElement>("firstReminderMessage"),
   secondReminderMessage: byId<HTMLTextAreaElement>("secondReminderMessage"),
   schedulePostedMessage: byId<HTMLTextAreaElement>("schedulePostedMessage"),
-  employeeScheduleUrl: byId<HTMLInputElement>("employeeScheduleUrl"),
+  employeeScheduleUrl: document.getElementById("employeeScheduleUrl") as HTMLInputElement | null,
   deadlinePreview: byId<HTMLDivElement>("deadlinePreview"),
   testSmsPhone: byId<HTMLInputElement>("testSmsPhone"),
   checkRemindersBtn: byId<HTMLButtonElement>("checkRemindersBtn"),
@@ -421,7 +421,9 @@ function bindEvents(): void {
   els.clearBtn.addEventListener("click", () => void clearData());
   els.darkModeToggle.addEventListener("change", () => void updateTheme());
   els.deadlineSettingsForm.addEventListener("submit", (event) => void saveDeadlineSettings(event));
-  [els.smsRemindersEnabled, els.deadlineDay, els.deadlineTime, els.firstReminderTime, els.secondReminderTime, els.firstReminderMessage, els.secondReminderMessage, els.schedulePostedMessage, els.employeeScheduleUrl].forEach((input) => input.addEventListener("input", updateDeadlinePreview));
+  [els.smsRemindersEnabled, els.deadlineDay, els.deadlineTime, els.firstReminderTime, els.secondReminderTime, els.firstReminderMessage, els.secondReminderMessage, els.schedulePostedMessage, els.employeeScheduleUrl]
+    .filter((input): input is HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement => Boolean(input))
+    .forEach((input) => input.addEventListener("input", updateDeadlinePreview));
   els.smsRemindersEnabled.addEventListener("change", () => void handleSmsReminderToggle());
   els.scheduleRulesDetails.addEventListener("toggle", updateScheduleRulesToggleLabel);
   els.checkRemindersBtn.addEventListener("click", () => void checkReminderStatus());
@@ -1914,7 +1916,6 @@ function openPreferredSettingsEditor(): void {
             <label class="full">Reminder #1 message <textarea data-preferred-field="firstReminderMessage" rows="3" maxlength="500" required>${escapeHtml(preferred.availabilityDeadline.firstReminderMessage)}</textarea></label>
             <label class="full">Reminder #2 message <textarea data-preferred-field="secondReminderMessage" rows="3" maxlength="500" required>${escapeHtml(preferred.availabilityDeadline.secondReminderMessage)}</textarea></label>
             <label class="full">Schedule Posted Text Message <textarea data-preferred-field="schedulePostedMessage" rows="3" maxlength="500" required>${escapeHtml(preferred.availabilityDeadline.schedulePostedMessage)}</textarea></label>
-            <label class="full">Employee Schedule Link <input data-preferred-field="employeeScheduleUrl" type="url" value="${escapeHtml(preferred.availabilityDeadline.employeeScheduleUrl)}"></label>
           </div>
         </fieldset>
         <fieldset><legend>Supabase Configuration</legend>
@@ -1985,7 +1986,7 @@ function readPreferredSettingsModal(overlay: HTMLElement): PreferredSettings {
       firstReminderMessage: value("firstReminderMessage"),
       secondReminderMessage: value("secondReminderMessage"),
       schedulePostedMessage: value("schedulePostedMessage"),
-      employeeScheduleUrl: value("employeeScheduleUrl")
+      employeeScheduleUrl: preferred.availabilityDeadline.employeeScheduleUrl
     },
     cloudConfig: {
       supabaseUrl: value("supabaseUrl").replace(/\/$/, ""),
@@ -2004,7 +2005,7 @@ function renderDeadlineSettings(): void {
   els.firstReminderMessage.value = settings.availabilityDeadline.firstReminderMessage;
   els.secondReminderMessage.value = settings.availabilityDeadline.secondReminderMessage;
   els.schedulePostedMessage.value = settings.availabilityDeadline.schedulePostedMessage;
-  els.employeeScheduleUrl.value = settings.availabilityDeadline.employeeScheduleUrl;
+  if (els.employeeScheduleUrl) els.employeeScheduleUrl.value = settings.availabilityDeadline.employeeScheduleUrl;
   els.sendTestSmsBtn.disabled = !settings.availabilityDeadline.smsRemindersEnabled;
   updateDeadlinePreview();
 }
@@ -2056,7 +2057,7 @@ async function persistDeadlineSettingsFromInputs(activityMessage = "", actionTyp
       firstReminderMessage: els.firstReminderMessage.value.trim(),
       secondReminderMessage: els.secondReminderMessage.value.trim(),
       schedulePostedMessage: els.schedulePostedMessage.value.trim(),
-      employeeScheduleUrl: els.employeeScheduleUrl.value.trim()
+      employeeScheduleUrl: settings.availabilityDeadline.employeeScheduleUrl
     }
   });
   settings = await window.habanerosDesktop.saveSettings(settings);
@@ -2081,7 +2082,7 @@ function updateDeadlinePreview(): void {
       firstReminderMessage: els.firstReminderMessage.value,
       secondReminderMessage: els.secondReminderMessage.value,
       schedulePostedMessage: els.schedulePostedMessage.value,
-      employeeScheduleUrl: els.employeeScheduleUrl.value
+      employeeScheduleUrl: settings.availabilityDeadline.employeeScheduleUrl
     }
   });
   const status = calculateAvailabilityStatus(state.workers, submissions, previewSettings, state.rules.weekStart);
