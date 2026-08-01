@@ -409,7 +409,7 @@ function bindEvents(): void {
   window.addEventListener("focus", cleanupAfterDialog);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) cleanupAfterDialog(); });
   els.noHourLimits.addEventListener("change", updateAddWorkerHourFields);
-  els.generateBtn.addEventListener("click", () => void generateAndSaveSchedule());
+  els.generateBtn.addEventListener("click", () => openScheduleWeekModal());
   els.printBtn.addEventListener("click", () => void printSchedule());
   els.pushScheduleBtn.addEventListener("click", () => void pushScheduleToEmployeeDomain());
   els.loadPreferredSettingsBtn.addEventListener("click", () => void loadPreferredSettings());
@@ -998,6 +998,70 @@ function syncRulesFromInputs(): void {
     const shift = input.dataset.shift === "close" ? "close" : "open";
     state.rules.staffing[day][shift] = Number(input.value) || 0;
   });
+}
+
+function isValidDateInputValue(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const parsed = parseLocalDate(value);
+  return parsed.getFullYear() === year && parsed.getMonth() === month - 1 && parsed.getDate() === day;
+}
+
+function openScheduleWeekModal(): void {
+  const overlay = document.createElement("section");
+  overlay.className = "modal-shell";
+  overlay.setAttribute("role", "presentation");
+  overlay.dataset.scheduleWeekOverlay = "true";
+  overlay.innerHTML = `
+    <div class="modal-panel schedule-week-modal" role="dialog" aria-modal="true" aria-labelledby="schedule-week-title">
+      <div class="section-head">
+        <h2 id="schedule-week-title">Choose Schedule Week</h2>
+        <p>Select the week you want to generate a schedule for.</p>
+      </div>
+      <form data-schedule-week-form class="schedule-week-form">
+        <label>
+          Week of
+          <input data-schedule-week-input type="date" required>
+        </label>
+        <div class="actions-row">
+          <button class="primary" data-schedule-week-continue type="submit" disabled>Continue</button>
+          <button class="secondary" data-schedule-week-cancel type="button">Cancel</button>
+        </div>
+      </form>
+    </div>`;
+  const form = overlay.querySelector<HTMLFormElement>("[data-schedule-week-form]");
+  const input = overlay.querySelector<HTMLInputElement>("[data-schedule-week-input]");
+  const continueButton = overlay.querySelector<HTMLButtonElement>("[data-schedule-week-continue]");
+  const cancelButton = overlay.querySelector<HTMLButtonElement>("[data-schedule-week-cancel]");
+  const updateContinueState = (): void => {
+    if (continueButton) continueButton.disabled = !isValidDateInputValue(input?.value || "");
+  };
+  const close = (): void => {
+    document.removeEventListener("keydown", handleKeydown);
+    overlay.remove();
+    cleanupAfterDialog();
+  };
+  const handleKeydown = (event: KeyboardEvent): void => {
+    if (event.key === "Escape") close();
+  };
+  form?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const selectedDate = input?.value || "";
+    if (!isValidDateInputValue(selectedDate)) return;
+    els.weekStart.value = mondayWeekStart(selectedDate);
+    close();
+    void generateAndSaveSchedule();
+  });
+  input?.addEventListener("input", updateContinueState);
+  input?.addEventListener("change", updateContinueState);
+  cancelButton?.addEventListener("click", close);
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) close();
+  });
+  document.addEventListener("keydown", handleKeydown);
+  document.body.appendChild(overlay);
+  updateContinueState();
+  window.setTimeout(() => input?.focus(), 0);
 }
 
 async function generateAndSaveSchedule(): Promise<void> {

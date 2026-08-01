@@ -11,6 +11,7 @@
 - Removed employee calendar subscription UI and admin calendar-link management, leaving only the manual **Download My Shift Calendar File** workflow for logged-in employees.
 - Renamed the employee calendar download button to **Add to Calendar** while keeping the same one-time `.ics` download behavior.
 - Removed the visible **Employee Schedule Link** field from Availability Reminders and Edit Preferred Settings while preserving the internal saved URL for schedule posted texts.
+- Moved schedule week selection out of Edit Schedule Rules and into a required **Choose Schedule Week** popup before generating a schedule.
 
 ## 1.10.23 - 2026-07-31
 
