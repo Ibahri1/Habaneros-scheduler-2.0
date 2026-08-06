@@ -1,6 +1,8 @@
 import { rpc } from "./supabase.js";
 import { addDays, followingMondayWeekStart, formatDate, formatWeek, mondayWeekStart, parseLocalDate, toIsoDate } from "./weeks.js";
 
+console.log("Habaneros employee app loaded - 12 hour time fix v3");
+
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const LANGUAGE_KEY = "habaneros-availability-language";
 const TRANSLATIONS = {
@@ -381,7 +383,7 @@ async function loadMySchedule() {
 
 function renderPostedSchedule(schedule, week) {
   const days = orderedPostedScheduleDays(schedule, week);
-  postedSchedule.innerHTML = '<div class="posted-week"><strong>' + t("weekOfSchedule") + " " + formatWeek(mondayWeekStart(week), currentLocale()) + '</strong></div>' + days.map((day) => '<article class="posted-day"><h2>' + escapeHtml(tDay(day.day) || day.day) + '</h2><p>' + escapeHtml(formatWeek(day.date, currentLocale())) + '</p>' + renderPostedShift(day.shifts?.open, t("openShift")) + renderPostedShift(day.shifts?.close, t("closeShift")) + '</article>').join("");
+  setScheduleHtml(postedSchedule, '<div class="posted-week"><strong>' + t("weekOfSchedule") + " " + formatWeek(mondayWeekStart(week), currentLocale()) + '</strong></div>' + days.map((day) => '<article class="posted-day"><h2>' + escapeHtml(tDay(day.day) || day.day) + '</h2><p>' + escapeHtml(formatWeek(day.date, currentLocale())) + '</p>' + renderPostedShift(day.shifts?.open, t("openShift")) + renderPostedShift(day.shifts?.close, t("closeShift")) + '</article>').join(""));
 }
 
 function renderPostedShift(shift, label) {
@@ -393,7 +395,11 @@ function renderMySchedule(schedule, week) {
   const days = orderedPostedScheduleDays(schedule, week);
   const rows = myScheduleRowsForDays(days);
   myScheduleRows = rows.map((row) => ({ ...row, week }));
-  mySchedule.innerHTML = '<div class="posted-week"><strong>' + t("weekOfSchedule") + " " + formatWeek(mondayWeekStart(week), currentLocale()) + '</strong></div>' + (rows.length ? rows.map(({ day, label, shift, worker }) => '<article class="posted-day"><h2>' + escapeHtml(tDay(day.day) || day.day) + '</h2><p>' + escapeHtml(formatWeek(day.date, currentLocale())) + '</p><section class="posted-shift"><h3>' + escapeHtml(label) + '</h3><div class="posted-worker"><strong>' + escapeHtml(worker.name || verifiedEmployee.name || "Employee") + '</strong><span>' + escapeHtml(formatWorkerShiftTime(worker, shift)) + '</span>' + (worker.position ? '<em>' + escapeHtml(worker.position) + '</em>' : '') + '</div></section></article>').join("") : '<div class="schedule-empty">' + t("notScheduled") + '</div>');
+  setScheduleHtml(mySchedule, '<div class="posted-week"><strong>' + t("weekOfSchedule") + " " + formatWeek(mondayWeekStart(week), currentLocale()) + '</strong></div>' + (rows.length ? rows.map(({ day, label, shift, worker }) => '<article class="posted-day"><h2>' + escapeHtml(tDay(day.day) || day.day) + '</h2><p>' + escapeHtml(formatWeek(day.date, currentLocale())) + '</p><section class="posted-shift"><h3>' + escapeHtml(label) + '</h3><div class="posted-worker"><strong>' + escapeHtml(worker.name || verifiedEmployee.name || "Employee") + '</strong><span>' + escapeHtml(formatWorkerShiftTime(worker, shift)) + '</span>' + (worker.position ? '<em>' + escapeHtml(worker.position) + '</em>' : '') + '</div></section></article>').join("") : '<div class="schedule-empty">' + t("notScheduled") + '</div>'));
+}
+
+function setScheduleHtml(element, html) {
+  element.innerHTML = formatAnyMilitaryTimesInText(html);
 }
 
 function formatWorkerShiftTime(worker, shift) {
@@ -419,10 +425,10 @@ function formatShiftTimeRange(start, end = "") {
   if (!first && !second) return "";
   if (!second) {
     const rangeMatch = first.match(/^\s*(.+?)\s*(?:-|–|—|to)\s*(.+?)\s*$/i);
-    if (rangeMatch) return formatTime12Hour(rangeMatch[1]) + " - " + formatTime12Hour(rangeMatch[2]);
-    return formatTime12Hour(first);
+    if (rangeMatch) return formatAnyMilitaryTimesInText(formatTime12Hour(rangeMatch[1]) + " - " + formatTime12Hour(rangeMatch[2]));
+    return formatAnyMilitaryTimesInText(formatTime12Hour(first));
   }
-  return formatTime12Hour(first) + " - " + formatTime12Hour(second);
+  return formatAnyMilitaryTimesInText(formatTime12Hour(first) + " - " + formatTime12Hour(second));
 }
 
 function formatTime12Hour(value) {
@@ -440,6 +446,16 @@ function formatTime12Hour(value) {
   const suffix = hours >= 12 ? "PM" : "AM";
   const displayHour = hours % 12 || 12;
   return displayHour + ":" + String(minutes).padStart(2, "0") + " " + suffix;
+}
+
+function formatAnyMilitaryTimesInText(text) {
+  return String(text || "")
+    .replace(/\b([01]?\d|2[0-3]):([0-5]\d)\b(?!\s*(?:AM|PM)\b)\s*-\s*\b([01]?\d|2[0-3]):([0-5]\d)\b(?!\s*(?:AM|PM)\b)/gi, (_match, startHour, startMinute, endHour, endMinute) => {
+      return formatTime12Hour(startHour + ":" + startMinute) + " - " + formatTime12Hour(endHour + ":" + endMinute);
+    })
+    .replace(/\b([01]?\d|2[0-3]):([0-5]\d)\b(?!\s*(?:AM|PM)\b)/gi, (_match, hour, minute) => {
+    return formatTime12Hour(hour + ":" + minute);
+  });
 }
 
 function myScheduleRowsForDays(days) {
