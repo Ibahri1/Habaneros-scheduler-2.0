@@ -35,7 +35,7 @@ export function defaultSettings(): AppSettings {
 }
 
 export function defaultAppState(): AppState {
-  return { workers: [], rules: defaultRules(), schedule: null, scheduleHistory: [], activityLog: [] };
+  return { workers: [], rules: defaultRules(), schedule: null, scheduleHistory: [], activityLog: [], availabilityHistory: [] };
 }
 
 export function defaultPreferredSettings(): PreferredSettings {
@@ -135,6 +135,9 @@ export function normalizeWorker(worker: Partial<Worker> & { id: string; name: st
   const isManager = Boolean(worker.isManager || String(worker.role) === "Manager" || worker.role === "Lead");
   const role = normalizeRole(worker.role, position, isManager);
   const maxWeeklyHours = Number(worker.maxWeeklyHours || 40);
+  const noDayLimit = worker.noDayLimit === undefined ? true : Boolean(worker.noDayLimit);
+  const maxDays = Math.min(7, Math.max(0, Number(worker.maxDays) || 0));
+  const preferredDaysPerWeek = Math.min(7, Math.max(0, Number(worker.preferredDaysPerWeek) || 0));
   const availability = worker.availability || [];
   const shiftAvailability = DAYS.reduce((result, day) => {
     const value = worker.shiftAvailability?.[day];
@@ -156,7 +159,9 @@ export function normalizeWorker(worker: Partial<Worker> & { id: string; name: st
     noHourLimits: Boolean(worker.noHourLimits),
     maxWeeklyHours,
     preferredWeeklyHours: Number(worker.preferredWeeklyHours || Math.min(maxWeeklyHours, 32)),
-    maxDays: Number(worker.maxDays || 7),
+    noDayLimit,
+    maxDays: noDayLimit ? maxDays : Math.max(1, maxDays || 5),
+    preferredDaysPerWeek,
     active: worker.active !== false,
     notes: String(worker.notes || ""),
     availability,

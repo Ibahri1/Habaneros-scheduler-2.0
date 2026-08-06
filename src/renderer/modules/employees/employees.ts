@@ -12,6 +12,9 @@ export interface WorkerFormInput {
   noHourLimits: boolean;
   maxWeeklyHours: number;
   preferredWeeklyHours: number;
+  noDayLimit: boolean;
+  maxDays: number;
+  preferredDaysPerWeek: number;
   notes: string;
   availability: DayName[];
   shiftAvailability: ShiftAvailabilityMap;
@@ -34,7 +37,9 @@ export function createWorker(input: WorkerFormInput, state: AppState): Worker {
     noHourLimits: input.noHourLimits,
     maxWeeklyHours: input.maxWeeklyHours,
     preferredWeeklyHours: input.preferredWeeklyHours,
-    maxDays: 7,
+    noDayLimit: input.noDayLimit,
+    maxDays: input.maxDays,
+    preferredDaysPerWeek: input.preferredDaysPerWeek,
     active: true,
     notes: input.notes,
     availability: input.availability,

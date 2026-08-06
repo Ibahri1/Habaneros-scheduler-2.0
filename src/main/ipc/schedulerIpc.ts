@@ -161,9 +161,9 @@ async function importData(): Promise<{ canceled: boolean; fileName?: string; con
 }
 
 function toCsv(payload: ExportPayload): string {
-  const rows = [["Name", "Employee Code", "Mobile Phone", "Calendar Token", "Position", "Lead", "Skill Rating", "No Hour Limits", "Active", "Max Weekly Hours", "Preferred Weekly Hours", "Available Days", "Shift Availability", "Default Open Start", "Default Open End", "Default Close Start", "Default Close End", "Notes"]];
+  const rows = [["Name", "Employee Code", "Mobile Phone", "Calendar Token", "Position", "Lead", "Skill Rating", "No Hour Limits", "Active", "Max Weekly Hours", "Preferred Weekly Hours", "No Day Limit", "Maximum Days Worked", "Preferred Days Per Week", "Available Days", "Shift Availability", "Default Open Start", "Default Open End", "Default Close Start", "Default Close End", "Notes"]];
   for (const worker of payload.state.workers) {
-    rows.push([worker.name, worker.employeeCode, worker.mobilePhone || "", worker.calendarToken || "", worker.position, worker.isManager ? "Yes" : "No", String(worker.skillRating), worker.noHourLimits ? "Yes" : "No", worker.active ? "Yes" : "No", String(worker.maxWeeklyHours), String(worker.preferredWeeklyHours), worker.availability.join(";"), Object.entries(worker.shiftAvailability).map(([day, shift]) => day + ":" + shift).join(";"), worker.shiftTimes.open.start, worker.shiftTimes.open.end, worker.shiftTimes.close.start, worker.shiftTimes.close.end, worker.notes]);
+    rows.push([worker.name, worker.employeeCode, worker.mobilePhone || "", worker.calendarToken || "", worker.position, worker.isManager ? "Yes" : "No", String(worker.skillRating), worker.noHourLimits ? "Yes" : "No", worker.active ? "Yes" : "No", String(worker.maxWeeklyHours), String(worker.preferredWeeklyHours), worker.noDayLimit ? "Yes" : "No", String(worker.maxDays || ""), String(worker.preferredDaysPerWeek || ""), worker.availability.join(";"), Object.entries(worker.shiftAvailability).map(([day, shift]) => day + ":" + shift).join(";"), worker.shiftTimes.open.start, worker.shiftTimes.open.end, worker.shiftTimes.close.start, worker.shiftTimes.close.end, worker.notes]);
   }
   return rows.map((row) => row.map(csvCell).join(",")).join("\n");
 }

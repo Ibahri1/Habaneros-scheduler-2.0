@@ -12,6 +12,9 @@
 - Renamed the employee calendar download button to **Add to Calendar** while keeping the same one-time `.ics` download behavior.
 - Removed the visible **Employee Schedule Link** field from Availability Reminders and Edit Preferred Settings while preserving the internal saved URL for schedule posted texts.
 - Moved schedule week selection out of Edit Schedule Rules and into a required **Choose Schedule Week** popup before generating a schedule.
+- Added employee weekly day-limit fields for **No Day Limit**, **Maximum Days Worked**, and **Preferred Days Per Week**, with scheduler enforcement and import/export support.
+- Added **Restore Availability** history for employee availability snapshots, previews, and password-protected restores.
+- Updated employee-facing schedule displays to show shift times in 12-hour AM/PM format, including the manual calendar download description.
 
 ## 1.10.23 - 2026-07-31
 

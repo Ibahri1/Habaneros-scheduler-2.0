@@ -26,7 +26,9 @@ export interface Worker {
   noHourLimits: boolean;
   maxWeeklyHours: number;
   preferredWeeklyHours: number;
+  noDayLimit: boolean;
   maxDays: number;
+  preferredDaysPerWeek: number;
   active: boolean;
   notes: string;
   availability: DayName[];
@@ -90,7 +92,22 @@ export interface ActivityLogEntry {
   userId?: string;
   metadata?: Record<string, unknown>;
 }
-export interface AppState { workers: Worker[]; rules: ScheduleRules; schedule: GeneratedSchedule | null; scheduleHistory: ScheduleHistoryEntry[]; activityLog: ActivityLogEntry[]; }
+export type AvailabilityHistoryAction = "saved" | "updated" | "cleared" | "restored";
+export interface AvailabilityHistoryEntry {
+  id: string;
+  createdAt: string;
+  localWorkerId: string;
+  employeeName: string;
+  employeeCode?: string;
+  weekStart: string;
+  actionType: AvailabilityHistoryAction;
+  source?: string;
+  availability: DayName[];
+  shiftAvailability: ShiftAvailabilityMap;
+  notes?: string;
+  restoredFromId?: string;
+}
+export interface AppState { workers: Worker[]; rules: ScheduleRules; schedule: GeneratedSchedule | null; scheduleHistory: ScheduleHistoryEntry[]; activityLog: ActivityLogEntry[]; availabilityHistory: AvailabilityHistoryEntry[]; }
 export interface PublishedScheduleSummary { id: string; workspaceId: string; weekStart: string; publishedAt: string; updatedAt: string; }
 export interface PublishedScheduleRecord extends PublishedScheduleSummary { schedule: GeneratedSchedule; }
 export interface AvailabilityDeadlineSettings {

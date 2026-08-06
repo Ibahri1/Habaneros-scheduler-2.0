@@ -1,6 +1,6 @@
 import "./browserBridge";
 import { defaultAppState, defaultSettings, defaultWorkerShiftTimes, normalizePreferredSettings, normalizeWorker } from "../shared/defaults";
-import { DAYS, SHORT_DAYS, ActivityCategory, ActivityLogEntry, AvailabilitySubmission, CloudConfig, DayName, AppSettings, AppState, DaySchedule, ExportFormat, ImportResult, PreferredSettings, PublishedScheduleSummary, ScheduleHistoryEntry, ShiftAvailability, ShiftAvailabilityMap, ShiftName, ShiftSchedule, SubmissionStatus, WEEK_DAYS, Worker, WorkerRole } from "../shared/types";
+import { DAYS, SHORT_DAYS, ActivityCategory, ActivityLogEntry, AvailabilityHistoryAction, AvailabilityHistoryEntry, AvailabilitySubmission, CloudConfig, DayName, AppSettings, AppState, DaySchedule, ExportFormat, ImportResult, PreferredSettings, PublishedScheduleSummary, ScheduleHistoryEntry, ShiftAvailability, ShiftAvailabilityMap, ShiftName, ShiftSchedule, SubmissionStatus, WEEK_DAYS, Worker, WorkerRole } from "../shared/types";
 import { addDays, formatDate, formatDuration, formatTime, getDateForWeekDay, mondayWeekStart, nextMonday, parseLocalDate } from "../shared/time";
 import { buildReminderMessage, calculateAvailabilityStatus, formatDeadlineSummary, normalizeSettings } from "../shared/availabilityDeadline";
 import { createWorker } from "./modules/employees/employees";
@@ -85,6 +85,9 @@ const els = {
   noHourLimits: byId<HTMLInputElement>("noHourLimits"),
   maxWeeklyHours: byId<HTMLInputElement>("maxWeeklyHours"),
   preferredWeeklyHours: byId<HTMLInputElement>("preferredWeeklyHours"),
+  noDayLimit: byId<HTMLInputElement>("noDayLimit"),
+  maxDays: byId<HTMLInputElement>("maxDays"),
+  preferredDaysPerWeek: byId<HTMLInputElement>("preferredDaysPerWeek"),
   workerOpenStart: byId<HTMLInputElement>("workerOpenStart"),
   workerOpenEnd: byId<HTMLInputElement>("workerOpenEnd"),
   workerCloseStart: byId<HTMLInputElement>("workerCloseStart"),
@@ -104,6 +107,7 @@ const els = {
   workerFilter: byId<HTMLSelectElement>("workerFilter"),
   workersList: byId<HTMLDivElement>("workersList"),
   workerCount: byId<HTMLSpanElement>("workerCount"),
+  restoreAvailabilityBtn: byId<HTMLButtonElement>("restoreAvailabilityBtn"),
   scheduleOutput: byId<HTMLDivElement>("scheduleOutput"),
   scheduleStatus: byId<HTMLSpanElement>("scheduleStatus"),
   generateBtn: byId<HTMLButtonElement>("generateBtn"),
@@ -286,6 +290,7 @@ async function init(): Promise<void> {
   renderStaffingInputs();
   bindEvents();
   updateAddWorkerHourFields();
+  updateAddWorkerDayFields();
   resetWorkerTimeInputs();
   showSection("dashboard");
   document.body.classList.remove("login-locked");
@@ -298,6 +303,7 @@ function normalizeLoadedData(): void {
   if (!state.rules.weekStart) state.rules.weekStart = nextMonday();
   else state.rules.weekStart = mondayWeekStart(state.rules.weekStart);
   state.activityLog = state.activityLog || [];
+  state.availabilityHistory = state.availabilityHistory || [];
   state.workers = state.workers.map((worker) => normalizeWorker(worker, state.rules));
   settings = normalizeSettings(settings);
   normalizeSchedule(state.schedule, state.rules.mealBreakHours);
@@ -409,6 +415,7 @@ function bindEvents(): void {
   window.addEventListener("focus", cleanupAfterDialog);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) cleanupAfterDialog(); });
   els.noHourLimits.addEventListener("change", updateAddWorkerHourFields);
+  els.noDayLimit.addEventListener("change", updateAddWorkerDayFields);
   els.generateBtn.addEventListener("click", () => openScheduleWeekModal());
   els.printBtn.addEventListener("click", () => void printSchedule());
   els.pushScheduleBtn.addEventListener("click", () => void pushScheduleToEmployeeDomain());
@@ -450,6 +457,7 @@ function bindEvents(): void {
   els.workerSearch.addEventListener("input", () => { workerSearchText = els.workerSearch.value.trim().toLowerCase(); renderWorkers(); });
   els.employeeSelector.addEventListener("change", () => void selectWorkerFromDropdown());
   els.workerFilter.addEventListener("change", () => { workerFilterValue = els.workerFilter.value; renderWorkers(); });
+  els.restoreAvailabilityBtn.addEventListener("click", () => openAvailabilityRestoreHistory());
   document.querySelectorAll<HTMLButtonElement>("[data-nav-section]").forEach((button) => button.addEventListener("click", () => showSection(button.dataset.navSection || "dashboard")));
   document.querySelectorAll<HTMLButtonElement>("[data-nav-target]").forEach((button) => button.addEventListener("click", () => showSection(button.dataset.navTarget || "dashboard")));
   document.querySelectorAll<HTMLButtonElement>("[data-open-add-worker]").forEach((button) => button.addEventListener("click", openAddWorkerModal));
@@ -633,6 +641,9 @@ async function addWorker(event: Event): Promise<void> {
       noHourLimits: els.noHourLimits.checked,
       maxWeeklyHours: Number(els.maxWeeklyHours.value) || 0,
       preferredWeeklyHours: Number(els.preferredWeeklyHours.value) || 0,
+      noDayLimit: els.noDayLimit.checked,
+      maxDays: Number(els.maxDays.value) || 0,
+      preferredDaysPerWeek: Number(els.preferredDaysPerWeek.value) || 0,
       notes: els.workerNotes.value,
       availability,
       shiftAvailability,
@@ -696,7 +707,11 @@ function resetWorkerForm(): void {
   els.skillRating.value = "5";
   els.maxWeeklyHours.value = "45";
   els.preferredWeeklyHours.value = "40";
+  els.noDayLimit.checked = true;
+  els.maxDays.value = "";
+  els.preferredDaysPerWeek.value = "";
   updateAddWorkerHourFields();
+  updateAddWorkerDayFields();
   els.availabilityChecks.querySelectorAll<HTMLSelectElement>("[data-add-shift]").forEach((select) => { select.value = "Unavailable"; });
   resetWorkerTimeInputs();
   ensureWorkerFormInteractive();
@@ -729,6 +744,10 @@ function cleanupAfterDialog(): void {
 function updateAddWorkerHourFields(): void {
   els.preferredWeeklyHours.disabled = els.noHourLimits.checked;
   els.maxWeeklyHours.disabled = els.noHourLimits.checked;
+}
+
+function updateAddWorkerDayFields(): void {
+  els.maxDays.disabled = els.noDayLimit.checked;
 }
 
 function renderWorkers(): void {
@@ -825,7 +844,7 @@ function renderSelectedWorkerProfile(worker: Worker): string {
   const phoneTag = worker.mobilePhone ? '<span class="tag good">Phone set</span>' : '<span class="tag warn">No phone</span>';
   const statusClass = hasAvailabilityEntered(worker) ? 'availability-entered' : 'availability-missing';
   const availabilityEditors = DAYS.map((day) => '<label class="worker-availability-day"><span>' + day + '</span><select data-availability-draft="' + day + '"><option value="Open" ' + selected(availabilityDraft[day] || 'Unavailable', 'Open') + '>Available for Open</option><option value="Close" ' + selected(availabilityDraft[day] || 'Unavailable', 'Close') + '>Available for Close</option><option value="Both" ' + selected(availabilityDraft[day] || 'Unavailable', 'Both') + '>Available for Both</option><option value="Unavailable" ' + selected(availabilityDraft[day] || 'Unavailable', 'Unavailable') + '>Not Available on ' + day + '</option></select></label>').join("");
-  return '<article class="employee-profile ' + statusClass + '"><div class="employee-profile-head"><div><h3>' + escapeHtml(worker.name) + '</h3><div class="tag-row">' + activeTag + leadTag + phoneTag + availabilityStatusTag(worker) + (availabilityDraftDirty ? '<span class="tag warn">Unsaved availability changes</span>' : '') + '</div></div><div class="card-actions"><button class="secondary" type="button" data-toggle-active="' + worker.id + '">' + (worker.active ? 'Deactivate' : 'Activate') + '</button><button class="secondary danger" type="button" data-delete="' + worker.id + '">Delete</button></div></div><div class="employee-profile-grid"><section class="employee-profile-section"><h4>Basic Info</h4><div class="profile-field-grid"><label>Name <input data-edit="' + worker.id + '" data-field="name" type="text" value="' + escapeHtml(worker.name) + '"></label><label>Position <input data-edit="' + worker.id + '" data-field="position" type="text" value="' + escapeHtml(worker.position) + '"></label><label>Employee code <input data-edit="' + worker.id + '" data-field="employeeCode" type="text" inputmode="numeric" pattern="\\d{4}" maxlength="4" value="' + escapeHtml(worker.employeeCode) + '"></label><label>Mobile Phone Number <input data-edit="' + worker.id + '" data-field="mobilePhone" type="tel" value="' + escapeHtml(worker.mobilePhone || '') + '" placeholder="+15551234567"></label><label>Lead <select data-edit="' + worker.id + '" data-field="isManager"><option value="false" ' + selected(String(worker.isManager), 'false') + '>No</option><option value="true" ' + selected(String(worker.isManager), 'true') + '>Yes</option></select></label></div></section><section class="employee-profile-section"><h4>Scheduling Defaults</h4><div class="profile-field-grid"><label>Skill Rating <input data-edit="' + worker.id + '" data-field="skillRating" type="number" min="1" max="10" step="1" value="' + worker.skillRating + '"></label><label class="check-row"><input data-edit="' + worker.id + '" data-field="noHourLimits" type="checkbox" ' + checked(worker.noHourLimits) + '> No Hour Limits</label><label>Preferred Weekly Hours <input data-edit="' + worker.id + '" data-field="preferredWeeklyHours" type="number" min="0" max="168" step="0.5" value="' + worker.preferredWeeklyHours + '" ' + disabled(worker.noHourLimits) + '></label><label>Maximum Weekly Hours <input data-edit="' + worker.id + '" data-field="maxWeeklyHours" type="number" min="0" max="168" step="0.5" value="' + worker.maxWeeklyHours + '" ' + disabled(worker.noHourLimits) + '></label><label>Default Open Start <input data-worker-time="' + worker.id + '" data-shift="open" data-part="start" type="time" value="' + worker.shiftTimes.open.start + '"></label><label>Default Open End <input data-worker-time="' + worker.id + '" data-shift="open" data-part="end" type="time" value="' + worker.shiftTimes.open.end + '"></label><label>Default Close Start <input data-worker-time="' + worker.id + '" data-shift="close" data-part="start" type="time" value="' + worker.shiftTimes.close.start + '"></label><label>Default Close End <input data-worker-time="' + worker.id + '" data-shift="close" data-part="end" type="time" value="' + worker.shiftTimes.close.end + '"></label></div></section><section class="employee-profile-section full"><h4>Availability</h4><p class="meta">Change multiple days first, then save availability when ready.</p><div class="employee-availability-grid">' + availabilityEditors + '</div><div class="employee-availability-actions"><button class="primary" data-save-availability="' + worker.id + '" type="button">Save Employee Availability</button><button class="secondary" data-cancel-availability="' + worker.id + '" type="button">Cancel</button></div></section><section class="employee-profile-section full"><h4>Notes</h4><label>Notes <textarea data-edit="' + worker.id + '" data-field="notes" rows="2">' + escapeHtml(worker.notes) + '</textarea></label></section></div></article>';
+  return '<article class="employee-profile ' + statusClass + '"><div class="employee-profile-head"><div><h3>' + escapeHtml(worker.name) + '</h3><div class="tag-row">' + activeTag + leadTag + phoneTag + availabilityStatusTag(worker) + (availabilityDraftDirty ? '<span class="tag warn">Unsaved availability changes</span>' : '') + '</div></div><div class="card-actions"><button class="secondary" type="button" data-toggle-active="' + worker.id + '">' + (worker.active ? 'Deactivate' : 'Activate') + '</button><button class="secondary danger" type="button" data-delete="' + worker.id + '">Delete</button></div></div><div class="employee-profile-grid"><section class="employee-profile-section"><h4>Basic Info</h4><div class="profile-field-grid"><label>Name <input data-edit="' + worker.id + '" data-field="name" type="text" value="' + escapeHtml(worker.name) + '"></label><label>Position <input data-edit="' + worker.id + '" data-field="position" type="text" value="' + escapeHtml(worker.position) + '"></label><label>Employee code <input data-edit="' + worker.id + '" data-field="employeeCode" type="text" inputmode="numeric" pattern="\\d{4}" maxlength="4" value="' + escapeHtml(worker.employeeCode) + '"></label><label>Mobile Phone Number <input data-edit="' + worker.id + '" data-field="mobilePhone" type="tel" value="' + escapeHtml(worker.mobilePhone || '') + '" placeholder="+15551234567"></label><label>Lead <select data-edit="' + worker.id + '" data-field="isManager"><option value="false" ' + selected(String(worker.isManager), 'false') + '>No</option><option value="true" ' + selected(String(worker.isManager), 'true') + '>Yes</option></select></label></div></section><section class="employee-profile-section"><h4>Scheduling Defaults</h4><div class="profile-field-grid"><label>Skill Rating <input data-edit="' + worker.id + '" data-field="skillRating" type="number" min="1" max="10" step="1" value="' + worker.skillRating + '"></label><label class="check-row"><input data-edit="' + worker.id + '" data-field="noHourLimits" type="checkbox" ' + checked(worker.noHourLimits) + '> No Hour Limits</label><label>Preferred Weekly Hours <input data-edit="' + worker.id + '" data-field="preferredWeeklyHours" type="number" min="0" max="168" step="0.5" value="' + worker.preferredWeeklyHours + '" ' + disabled(worker.noHourLimits) + '></label><label>Maximum Weekly Hours <input data-edit="' + worker.id + '" data-field="maxWeeklyHours" type="number" min="0" max="168" step="0.5" value="' + worker.maxWeeklyHours + '" ' + disabled(worker.noHourLimits) + '></label><label class="check-row"><input data-edit="' + worker.id + '" data-field="noDayLimit" type="checkbox" ' + checked(worker.noDayLimit) + '> No Day Limit</label><label>Preferred Days Per Week <input data-edit="' + worker.id + '" data-field="preferredDaysPerWeek" type="number" min="0" max="7" step="1" value="' + (worker.preferredDaysPerWeek || '') + '"></label><label>Maximum Days Worked <input data-edit="' + worker.id + '" data-field="maxDays" type="number" min="1" max="7" step="1" value="' + (worker.maxDays || '') + '" ' + disabled(worker.noDayLimit) + '></label><label>Default Open Start <input data-worker-time="' + worker.id + '" data-shift="open" data-part="start" type="time" value="' + worker.shiftTimes.open.start + '"></label><label>Default Open End <input data-worker-time="' + worker.id + '" data-shift="open" data-part="end" type="time" value="' + worker.shiftTimes.open.end + '"></label><label>Default Close Start <input data-worker-time="' + worker.id + '" data-shift="close" data-part="start" type="time" value="' + worker.shiftTimes.close.start + '"></label><label>Default Close End <input data-worker-time="' + worker.id + '" data-shift="close" data-part="end" type="time" value="' + worker.shiftTimes.close.end + '"></label></div></section><section class="employee-profile-section full"><h4>Availability</h4><p class="meta">Change multiple days first, then save availability when ready.</p><div class="employee-availability-grid">' + availabilityEditors + '</div><div class="employee-availability-actions"><button class="primary" data-save-availability="' + worker.id + '" type="button">Save Employee Availability</button><button class="secondary" data-cancel-availability="' + worker.id + '" type="button">Cancel</button></div></section><section class="employee-profile-section full"><h4>Notes</h4><label>Notes <textarea data-edit="' + worker.id + '" data-field="notes" rows="2">' + escapeHtml(worker.notes) + '</textarea></label></section></div></article>';
 }
 
 function selected(current: string, value: string): string { return current === value ? "selected" : ""; }
@@ -864,6 +883,34 @@ function resetAvailabilityDraft(): void {
   availabilityDraftDirty = false;
 }
 
+function currentAvailabilityWeekStart(): string {
+  return mondayWeekStart(state.rules.weekStart || nextMonday());
+}
+
+function createAvailabilitySnapshot(worker: Worker, actionType: AvailabilityHistoryAction, source: string, restoredFromId = "", weekStart = currentAvailabilityWeekStart()): AvailabilityHistoryEntry {
+  return {
+    id: createId(),
+    createdAt: new Date().toISOString(),
+    localWorkerId: worker.id,
+    employeeName: worker.name,
+    employeeCode: worker.employeeCode,
+    weekStart: mondayWeekStart(weekStart),
+    actionType,
+    source,
+    availability: [...worker.availability],
+    shiftAvailability: DAYS.reduce((result, day) => {
+      result[day] = worker.availability.includes(day) ? (worker.shiftAvailability[day] || "Both") : "Unavailable";
+      return result;
+    }, {} as ShiftAvailabilityMap),
+    notes: worker.notes,
+    restoredFromId: restoredFromId || undefined
+  };
+}
+
+function saveAvailabilitySnapshot(worker: Worker, actionType: AvailabilityHistoryAction, source: string, restoredFromId = "", weekStart = currentAvailabilityWeekStart()): void {
+  state.availabilityHistory = [createAvailabilitySnapshot(worker, actionType, source, restoredFromId, weekStart), ...(state.availabilityHistory || [])].slice(0, 500);
+}
+
 function updateAvailabilityDraft(input: HTMLSelectElement): void {
   const day = input.dataset.availabilityDraft as DayName;
   if (!DAYS.includes(day)) return;
@@ -876,6 +923,7 @@ async function saveSelectedWorkerAvailability(id: string): Promise<void> {
   try {
     const worker = findWorker(id);
     if (!worker || availabilityDraftWorkerId !== id) return;
+    saveAvailabilitySnapshot(worker, hasAvailabilityEntered(worker) ? "updated" : "saved", "admin edit");
     worker.availability = DAYS.filter((day) => availabilityDraft[day] && availabilityDraft[day] !== "Unavailable");
     worker.shiftAvailability = DAYS.reduce((result, day) => {
       result[day] = worker.availability.includes(day) ? (availabilityDraft[day] || "Both") : "Unavailable";
@@ -885,6 +933,7 @@ async function saveSelectedWorkerAvailability(id: string): Promise<void> {
     state.schedule = null;
     await saveStateAndRender();
     await showDialogMessage("Employee availability saved.");
+    addActivityLog({ category: "availability", actionType: "employee_availability_updated", message: "Availability updated for " + worker.name + ".", weekStart: currentAvailabilityWeekStart(), employeeName: worker.name, employeeId: worker.id, employeeCode: worker.employeeCode });
     selectedWorkerId = "";
     resetAvailabilityDraft();
     renderWorkers();
@@ -956,6 +1005,12 @@ async function editWorker(input: HTMLInputElement | HTMLSelectElement | HTMLText
     case "noHourLimits": worker.noHourLimits = input instanceof HTMLInputElement ? input.checked : worker.noHourLimits; break;
     case "maxWeeklyHours": worker.maxWeeklyHours = Number(input.value) || 0; break;
     case "preferredWeeklyHours": worker.preferredWeeklyHours = Number(input.value) || 0; break;
+    case "noDayLimit":
+      worker.noDayLimit = input instanceof HTMLInputElement ? input.checked : worker.noDayLimit;
+      if (!worker.noDayLimit && !worker.maxDays) worker.maxDays = 5;
+      break;
+    case "maxDays": worker.maxDays = Math.min(7, Math.max(0, Number(input.value) || 0)); if (!worker.noDayLimit && !worker.maxDays) worker.maxDays = 5; break;
+    case "preferredDaysPerWeek": worker.preferredDaysPerWeek = Math.min(7, Math.max(0, Number(input.value) || 0)); break;
     case "notes": worker.notes = input.value; break;
     default: return;
   }
@@ -1667,7 +1722,7 @@ function importCsv(content: string): ImportResult {
     const name = get("name") || get("employee name");
     if (!name.trim()) { skipped++; continue; }
     const isLead = yes(get("lead")) || yes(get("manager"));
-    const worker = normalizeWorker({ id: createId(), employeeCode: get("employee code"), mobilePhone: get("mobile phone") || get("mobile phone number") || get("phone") || get("phone number"), calendarToken: get("calendar token"), name, position: get("position") || "Crew", role: isLead ? "Lead" : "Crew", isManager: isLead, skillRating: Number(get("skill rating")) || 5, noHourLimits: yes(get("no hour limits")), maxWeeklyHours: Number(get("max weekly hours")) || 45, preferredWeeklyHours: Number(get("preferred weekly hours")) || 40, maxDays: 7, active: !no(get("active")), notes: get("notes"), availability: splitDays(get("available days")), shiftAvailability: splitShiftAvailability(get("shift availability")), shiftTimes: { open: { start: get("default open start"), end: get("default open end") }, close: { start: get("default close start"), end: get("default close end") } } }, state.rules);
+    const worker = normalizeWorker({ id: createId(), employeeCode: get("employee code"), mobilePhone: get("mobile phone") || get("mobile phone number") || get("phone") || get("phone number"), calendarToken: get("calendar token"), name, position: get("position") || "Crew", role: isLead ? "Lead" : "Crew", isManager: isLead, skillRating: Number(get("skill rating")) || 5, noHourLimits: yes(get("no hour limits")), maxWeeklyHours: Number(get("max weekly hours")) || 45, preferredWeeklyHours: Number(get("preferred weekly hours")) || 40, noDayLimit: !get("no day limit") ? true : yes(get("no day limit")), maxDays: Number(get("maximum days worked") || get("max days")) || 0, preferredDaysPerWeek: Number(get("preferred days per week")) || 0, active: !no(get("active")), notes: get("notes"), availability: splitDays(get("available days")), shiftAvailability: splitShiftAvailability(get("shift availability")), shiftTimes: { open: { start: get("default open start"), end: get("default open end") }, close: { start: get("default close start"), end: get("default close end") } } }, state.rules);
     if (mergeWorker(worker)) imported++; else skipped++;
   }
   return { imported, skipped, messages: skipped ? [String(skipped) + " duplicate or invalid row(s) skipped."] : [] };
@@ -1811,6 +1866,7 @@ async function handleSubmission(button: HTMLButtonElement): Promise<void> {
     if (action === "apply") {
       const worker = findWorker(submission.localWorkerId);
       if (!worker) { await showDialogMessage("This submission is not linked to a local employee. Sync employees and try again."); return; }
+      saveAvailabilitySnapshot(worker, "updated", "employee submission", "", submission.weekStart);
       worker.availability = [...submission.availableDays];
       worker.shiftAvailability = { ...submission.shiftAvailability };
       await saveState();
@@ -1840,6 +1896,7 @@ async function applyAllSubmissions(): Promise<void> {
     }
     for (const submission of pending) {
       const worker = findWorker(submission.localWorkerId)!;
+      saveAvailabilitySnapshot(worker, "updated", "employee submission", "", submission.weekStart);
       worker.availability = [...submission.availableDays];
       worker.shiftAvailability = { ...submission.shiftAvailability };
       submission.status = "applied";
@@ -1853,6 +1910,116 @@ async function applyAllSubmissions(): Promise<void> {
     renderDashboard();
     renderNeedsAttention();
   } catch (error) { showError("Not every submission could be applied. Refresh the inbox before trying again.", error); }
+}
+
+function openAvailabilityRestoreHistory(): void {
+  const overlay = document.createElement("section");
+  overlay.className = "modal-shell";
+  overlay.setAttribute("role", "presentation");
+  overlay.dataset.availabilityRestoreOverlay = "true";
+  overlay.innerHTML = `
+    <div class="modal-panel availability-restore-modal" role="dialog" aria-modal="true" aria-labelledby="availability-restore-title">
+      <div class="section-head with-action">
+        <div>
+          <h2 id="availability-restore-title">Availability Restore History</h2>
+          <p>Preview previous employee availability versions and restore one if needed.</p>
+        </div>
+        <button class="secondary" data-restore-close type="button">Close</button>
+      </div>
+      <div class="history-filters">
+        <label>Employee <select data-restore-employee></select></label>
+        <label>Week of <select data-restore-week></select></label>
+        <label>Action <select data-restore-action><option value="">All</option><option value="saved">Saved</option><option value="updated">Updated</option><option value="cleared">Cleared</option><option value="restored">Restored</option></select></label>
+      </div>
+      <div data-restore-list class="history-list"></div>
+      <div data-restore-preview class="availability-restore-preview" hidden></div>
+    </div>`;
+  const employeeFilter = overlay.querySelector<HTMLSelectElement>("[data-restore-employee]")!;
+  const weekFilter = overlay.querySelector<HTMLSelectElement>("[data-restore-week]")!;
+  const actionFilter = overlay.querySelector<HTMLSelectElement>("[data-restore-action]")!;
+  const list = overlay.querySelector<HTMLDivElement>("[data-restore-list]")!;
+  const preview = overlay.querySelector<HTMLDivElement>("[data-restore-preview]")!;
+  const close = (): void => {
+    document.removeEventListener("keydown", handleKeydown);
+    overlay.remove();
+    cleanupAfterDialog();
+  };
+  const handleKeydown = (event: KeyboardEvent): void => {
+    if (event.key === "Escape") close();
+  };
+  const filteredEntries = (): AvailabilityHistoryEntry[] => (state.availabilityHistory || [])
+    .filter((entry) => !employeeFilter.value || entry.localWorkerId === employeeFilter.value)
+    .filter((entry) => !weekFilter.value || entry.weekStart === weekFilter.value)
+    .filter((entry) => !actionFilter.value || entry.actionType === actionFilter.value)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const renderFilters = (): void => {
+    const employeeValue = employeeFilter.value;
+    const weekValue = weekFilter.value;
+    const employees = [...new Map((state.availabilityHistory || []).map((entry) => [entry.localWorkerId, entry.employeeName] as const)).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+    const weeks = [...new Set((state.availabilityHistory || []).map((entry) => entry.weekStart))].sort().reverse();
+    employeeFilter.innerHTML = '<option value="">All employees</option>' + employees.map(([id, name]) => '<option value="' + escapeHtml(id) + '">' + escapeHtml(name) + '</option>').join("");
+    weekFilter.innerHTML = '<option value="">All weeks</option>' + weeks.map((week) => '<option value="' + week + '">Week of ' + formatWeek(week) + '</option>').join("");
+    employeeFilter.value = employees.some(([id]) => id === employeeValue) ? employeeValue : "";
+    weekFilter.value = weeks.includes(weekValue) ? weekValue : "";
+  };
+  const renderList = (): void => {
+    renderFilters();
+    const entries = filteredEntries().slice(0, 50);
+    if (!entries.length) {
+      list.innerHTML = '<div class="empty-state">No availability restore history matches these filters.</div>';
+      return;
+    }
+    list.innerHTML = entries.map((entry) => '<article class="history-row"><div><strong>' + escapeHtml(entry.employeeName) + '</strong><div class="meta">' + escapeHtml(formatSubmittedAt(entry.createdAt)) + '</div><span class="tag">' + escapeHtml(availabilityHistoryActionLabel(entry.actionType)) + '</span></div><div class="history-details"><span>Week of ' + formatWeek(entry.weekStart) + '</span><span>' + escapeHtml(availabilityHistorySummary(entry)) + '</span><span>Source: ' + escapeHtml(entry.source || 'Not recorded') + '</span></div><div class="card-actions"><button class="secondary" data-restore-preview-id="' + entry.id + '" type="button">Preview</button><button class="primary" data-restore-id="' + entry.id + '" type="button">Restore</button></div></article>').join("");
+    list.querySelectorAll<HTMLButtonElement>("[data-restore-preview-id]").forEach((button) => button.addEventListener("click", () => renderPreview(button.dataset.restorePreviewId || "")));
+    list.querySelectorAll<HTMLButtonElement>("[data-restore-id]").forEach((button) => button.addEventListener("click", () => void restoreAvailabilityVersion(button.dataset.restoreId || "", renderList)));
+  };
+  const renderPreview = (id: string): void => {
+    const entry = (state.availabilityHistory || []).find((item) => item.id === id);
+    if (!entry) return;
+    preview.hidden = false;
+    preview.innerHTML = '<div class="section-head with-action"><div><h3>Preview Availability</h3><p>' + escapeHtml(entry.employeeName) + ' | Week of ' + formatWeek(entry.weekStart) + '</p></div><div class="actions-row"><button class="secondary" data-preview-close type="button">Close</button><button class="primary" data-preview-restore="' + entry.id + '" type="button">Restore This Version</button></div></div><div class="employee-availability-grid">' + DAYS.map((day) => '<div class="worker-availability-day"><span>' + day + '</span><strong>' + escapeHtml(entry.shiftAvailability[day] || (entry.availability.includes(day) ? 'Both' : 'Unavailable')) + '</strong></div>').join("") + '</div><div class="deadline-preview"><strong>Notes:</strong> ' + escapeHtml(entry.notes || 'None') + '</div>';
+    preview.querySelector<HTMLButtonElement>("[data-preview-close]")?.addEventListener("click", () => { preview.hidden = true; preview.innerHTML = ""; });
+    preview.querySelector<HTMLButtonElement>("[data-preview-restore]")?.addEventListener("click", () => void restoreAvailabilityVersion(id, renderList));
+    preview.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  };
+  [employeeFilter, weekFilter, actionFilter].forEach((filter) => filter.addEventListener("change", () => { preview.hidden = true; preview.innerHTML = ""; renderList(); }));
+  overlay.querySelector<HTMLButtonElement>("[data-restore-close]")?.addEventListener("click", close);
+  overlay.addEventListener("click", (event) => { if (event.target === overlay) close(); });
+  document.addEventListener("keydown", handleKeydown);
+  document.body.appendChild(overlay);
+  renderList();
+}
+
+function availabilityHistoryActionLabel(actionType: AvailabilityHistoryAction): string {
+  return actionType === "saved" ? "Saved" : actionType === "updated" ? "Updated" : actionType === "cleared" ? "Cleared" : "Restored";
+}
+
+function availabilityHistorySummary(entry: AvailabilityHistoryEntry): string {
+  if (entry.actionType === "cleared") return "Availability cleared";
+  if (entry.actionType === "restored") return "Availability restored from an earlier version";
+  if (entry.actionType === "updated") return "Availability updated for Week of " + formatWeek(entry.weekStart);
+  return "Availability saved for Week of " + formatWeek(entry.weekStart);
+}
+
+async function restoreAvailabilityVersion(id: string, afterRestore?: () => void): Promise<void> {
+  const entry = (state.availabilityHistory || []).find((item) => item.id === id);
+  if (!entry) return;
+  const worker = findWorker(entry.localWorkerId);
+  if (!worker) { await showDialogMessage("This history entry is not linked to a current employee profile."); return; }
+  if (!await requireAdminActionPassword("Restore Availability")) return;
+  if (!await confirmDialog("Restore this availability version? This will replace the current availability for this employee and week.")) return;
+  saveAvailabilitySnapshot(worker, "restored", "availability restore", entry.id);
+  worker.availability = [...entry.availability];
+  worker.shiftAvailability = DAYS.reduce((result, day) => {
+    result[day] = worker.availability.includes(day) ? (entry.shiftAvailability[day] || "Both") : "Unavailable";
+    return result;
+  }, {} as ShiftAvailabilityMap);
+  state.schedule = null;
+  if (selectedWorkerId === worker.id) resetAvailabilityDraft();
+  await saveStateAndRender();
+  addActivityLog({ category: "availability", actionType: "employee_availability_restored", message: "Availability restored for " + worker.name + ".", weekStart: entry.weekStart, employeeName: worker.name, employeeId: worker.id, employeeCode: worker.employeeCode, metadata: { restoredFromId: entry.id } });
+  showToast("Availability restored.", "good", 7000);
+  afterRestore?.();
 }
 
 function renderHistoryFilters(): void {
@@ -1899,12 +2066,14 @@ function formatWeek(value: string): string {
 
 async function clearData(): Promise<void> {
   if (!await confirmDialog("This will reset all employee availability to Not Available. Employee profiles and schedule history will stay saved.")) return;
+  state.workers.filter(hasAvailabilityEntered).forEach((worker) => saveAvailabilitySnapshot(worker, "cleared", "admin clear"));
   state.workers.forEach((worker) => {
     worker.availability = [];
     worker.shiftAvailability = DAYS.reduce((result, day) => ({ ...result, [day]: "Unavailable" as ShiftAvailability }), {} as ShiftAvailabilityMap);
   });
   state.schedule = null;
   await saveStateAndRender();
+  addActivityLog({ category: "availability", actionType: "employee_availability_cleared", message: "Employee availability cleared.", weekStart: currentAvailabilityWeekStart() });
 }
 
 async function loadPreferredSettings(): Promise<void> {

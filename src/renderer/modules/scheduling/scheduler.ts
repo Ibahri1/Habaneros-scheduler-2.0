@@ -2,16 +2,20 @@ import { formatTime, getDateForWeekDay, getShiftDurationHours, mondayWeekStart }
 import { AppState, AssignedWorker, DayName, GeneratedSchedule, ShiftName, ShiftSchedule, WEEK_DAYS, Worker } from "../../../shared/types";
 import { createId } from "../../shared/ids";
 
-interface AssignmentStats { hours: Record<string, number>; days: Record<string, number>; }
+interface AssignmentStats { hours: Record<string, number>; days: Record<string, Set<DayName>>; }
 interface ShiftContext { day: DayName; shiftName: ShiftName; needed: number; assigned: Worker[]; assignedToday: Set<string>; warnings: string[]; }
 
 function shiftDuration(worker: Worker, shiftName: ShiftName): number { return getShiftDurationHours(worker.shiftTimes[shiftName].start, worker.shiftTimes[shiftName].end); }
+function daysWorked(worker: Worker, stats: AssignmentStats): number { return stats.days[worker.id]?.size || 0; }
+function isAtDayLimit(worker: Worker, context: ShiftContext, stats: AssignmentStats): boolean {
+  return !worker.noDayLimit && !stats.days[worker.id]?.has(context.day) && daysWorked(worker, stats) >= worker.maxDays;
+}
 
 function canWork(worker: Worker, context: ShiftContext, stats: AssignmentStats): boolean {
   if (!worker.active || !worker.availability.includes(context.day) || context.assignedToday.has(worker.id)) return false;
   const availability = worker.shiftAvailability[context.day] || "Both";
   if (availability === "Unavailable" || (availability !== "Both" && availability.toLowerCase() !== context.shiftName)) return false;
-  if ((stats.days[worker.id] || 0) >= worker.maxDays) return false;
+  if (isAtDayLimit(worker, context, stats)) return false;
   return worker.noHourLimits || (stats.hours[worker.id] || 0) + shiftDuration(worker, context.shiftName) <= worker.maxWeeklyHours;
 }
 
@@ -19,7 +23,7 @@ function canWorkIgnoringHours(worker: Worker, context: ShiftContext, stats: Assi
   if (!worker.active || !worker.availability.includes(context.day) || context.assignedToday.has(worker.id)) return false;
   const availability = worker.shiftAvailability[context.day] || "Both";
   if (availability === "Unavailable" || (availability !== "Both" && availability.toLowerCase() !== context.shiftName)) return false;
-  return (stats.days[worker.id] || 0) < worker.maxDays;
+  return !isAtDayLimit(worker, context, stats);
 }
 
 function rankWorkers(workers: Worker[], stats: AssignmentStats, assigned: Worker[] = []): Worker[] {
@@ -34,6 +38,9 @@ function rankWorkers(workers: Worker[], stats: AssignmentStats, assigned: Worker
     } else if (a.skillRating !== b.skillRating) {
       return a.skillRating - b.skillRating;
     }
+    const aDayGap = Math.max(0, (a.preferredDaysPerWeek || 0) - daysWorked(a, stats));
+    const bDayGap = Math.max(0, (b.preferredDaysPerWeek || 0) - daysWorked(b, stats));
+    if (aDayGap !== bDayGap) return bDayGap - aDayGap;
     const aGap = a.noHourLimits ? 0 : Math.max(0, a.preferredWeeklyHours - aHours);
     const bGap = b.noHourLimits ? 0 : Math.max(0, b.preferredWeeklyHours - bHours);
     if (aGap !== bGap) return bGap - aGap;
@@ -67,7 +74,8 @@ function rankFillCandidates(workers: Worker[], context: ShiftContext, stats: Ass
 function assign(worker: Worker, context: ShiftContext, stats: AssignmentStats): void {
   context.assigned.push(worker);
   context.assignedToday.add(worker.id);
-  stats.days[worker.id] = (stats.days[worker.id] || 0) + 1;
+  if (!stats.days[worker.id]) stats.days[worker.id] = new Set<DayName>();
+  stats.days[worker.id].add(context.day);
   stats.hours[worker.id] = (stats.hours[worker.id] || 0) + shiftDuration(worker, context.shiftName);
 }
 
@@ -88,7 +96,7 @@ function explainNoCandidates(context: ShiftContext, workers: Worker[], stats: As
   });
   if (!shiftAvailable.length) return "No employee available for " + label + ".";
   if (shiftAvailable.every((worker) => context.assignedToday.has(worker.id))) return "Available employees are already assigned another shift on " + context.day + ".";
-  if (!shiftAvailable.some((worker) => canWorkIgnoringHours(worker, context, stats))) return "Maximum days prevented full staffing for " + label + ".";
+  if (!shiftAvailable.some((worker) => canWorkIgnoringHours(worker, context, stats))) return "Schedule could not meet coverage without exceeding day limits for " + label + ".";
   if (!shiftAvailable.some((worker) => worker.noHourLimits || (stats.hours[worker.id] || 0) + shiftDuration(worker, context.shiftName) <= worker.maxWeeklyHours)) return "Hour limits prevented full staffing for " + label + ".";
   return "Not enough available workers for " + label + ".";
 }
