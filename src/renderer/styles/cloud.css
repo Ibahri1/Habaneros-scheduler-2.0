@@ -304,6 +304,7 @@ button:disabled { opacity: .52; cursor: not-allowed; }
 .schedule-posted-text-modal { width: min(760px, 100%); }
 .availability-restore-modal { width: min(1060px, 100%); }
 .availability-restore-preview { margin-top: 14px; border: 1px solid var(--line); border-radius: 8px; padding: 14px; background: var(--panel); }
+.availability-bulk-preview { display: grid; gap: 12px; margin-top: 12px; }
 .preferred-settings-form { display: grid; gap: 14px; }
 .preferred-staffing-grid { display: grid; grid-template-columns: repeat(2, minmax(180px, 1fr)); gap: 10px; margin-top: 12px; }
 .schedule-text-recipient-list { display: grid; gap: 8px; }

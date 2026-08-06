@@ -1,6 +1,6 @@
 import "./browserBridge";
 import { defaultAppState, defaultSettings, defaultWorkerShiftTimes, normalizePreferredSettings, normalizeWorker } from "../shared/defaults";
-import { DAYS, SHORT_DAYS, ActivityCategory, ActivityLogEntry, AvailabilityHistoryAction, AvailabilityHistoryEntry, AvailabilitySubmission, CloudConfig, DayName, AppSettings, AppState, DaySchedule, ExportFormat, ImportResult, PreferredSettings, PublishedScheduleSummary, ScheduleHistoryEntry, ShiftAvailability, ShiftAvailabilityMap, ShiftName, ShiftSchedule, SubmissionStatus, WEEK_DAYS, Worker, WorkerRole } from "../shared/types";
+import { DAYS, SHORT_DAYS, ActivityCategory, ActivityLogEntry, AvailabilityHistoryAction, AvailabilityHistoryEntry, AvailabilityHistoryWorkerSnapshot, AvailabilitySubmission, CloudConfig, DayName, AppSettings, AppState, DaySchedule, ExportFormat, ImportResult, PreferredSettings, PublishedScheduleSummary, ScheduleHistoryEntry, ShiftAvailability, ShiftAvailabilityMap, ShiftName, ShiftSchedule, SubmissionStatus, WEEK_DAYS, Worker, WorkerRole } from "../shared/types";
 import { addDays, formatDate, formatDuration, formatTime, getDateForWeekDay, mondayWeekStart, nextMonday, parseLocalDate } from "../shared/time";
 import { buildReminderMessage, calculateAvailabilityStatus, formatDeadlineSummary, normalizeSettings } from "../shared/availabilityDeadline";
 import { createWorker } from "./modules/employees/employees";
@@ -887,28 +887,55 @@ function currentAvailabilityWeekStart(): string {
   return mondayWeekStart(state.rules.weekStart || nextMonday());
 }
 
-function createAvailabilitySnapshot(worker: Worker, actionType: AvailabilityHistoryAction, source: string, restoredFromId = "", weekStart = currentAvailabilityWeekStart()): AvailabilityHistoryEntry {
+function createWorkerAvailabilitySnapshot(worker: Worker): AvailabilityHistoryWorkerSnapshot {
   return {
-    id: createId(),
-    createdAt: new Date().toISOString(),
     localWorkerId: worker.id,
     employeeName: worker.name,
     employeeCode: worker.employeeCode,
-    weekStart: mondayWeekStart(weekStart),
-    actionType,
-    source,
     availability: [...worker.availability],
     shiftAvailability: DAYS.reduce((result, day) => {
       result[day] = worker.availability.includes(day) ? (worker.shiftAvailability[day] || "Both") : "Unavailable";
       return result;
     }, {} as ShiftAvailabilityMap),
-    notes: worker.notes,
+    notes: worker.notes
+  };
+}
+
+function createAvailabilitySnapshot(worker: Worker, actionType: AvailabilityHistoryAction, source: string, restoredFromId = "", weekStart = currentAvailabilityWeekStart()): AvailabilityHistoryEntry {
+  return {
+    id: createId(),
+    createdAt: new Date().toISOString(),
+    ...createWorkerAvailabilitySnapshot(worker),
+    weekStart: mondayWeekStart(weekStart),
+    actionType,
+    source,
     restoredFromId: restoredFromId || undefined
   };
 }
 
 function saveAvailabilitySnapshot(worker: Worker, actionType: AvailabilityHistoryAction, source: string, restoredFromId = "", weekStart = currentAvailabilityWeekStart()): void {
   state.availabilityHistory = [createAvailabilitySnapshot(worker, actionType, source, restoredFromId, weekStart), ...(state.availabilityHistory || [])].slice(0, 500);
+}
+
+function saveBulkAvailabilitySnapshot(workers: Worker[], actionType: "bulk_cleared" | "restored", source: string, restoredFromId = "", weekStart = currentAvailabilityWeekStart()): AvailabilityHistoryEntry | null {
+  const snapshots = workers.map(createWorkerAvailabilitySnapshot);
+  if (!snapshots.length) return null;
+  const entry: AvailabilityHistoryEntry = {
+    id: createId(),
+    createdAt: new Date().toISOString(),
+    localWorkerId: "__bulk__",
+    employeeName: "All employees",
+    weekStart: mondayWeekStart(weekStart),
+    actionType,
+    source,
+    availability: [],
+    shiftAvailability: DAYS.reduce((result, day) => ({ ...result, [day]: "Unavailable" as ShiftAvailability }), {} as ShiftAvailabilityMap),
+    employeeCount: snapshots.length,
+    employeeSnapshots: snapshots,
+    restoredFromId: restoredFromId || undefined
+  };
+  state.availabilityHistory = [entry, ...(state.availabilityHistory || [])].slice(0, 500);
+  return entry;
 }
 
 function updateAvailabilityDraft(input: HTMLSelectElement): void {
@@ -1929,7 +1956,7 @@ function openAvailabilityRestoreHistory(): void {
       <div class="history-filters">
         <label>Employee <select data-restore-employee></select></label>
         <label>Week of <select data-restore-week></select></label>
-        <label>Action <select data-restore-action><option value="">All</option><option value="saved">Saved</option><option value="updated">Updated</option><option value="cleared">Cleared</option><option value="restored">Restored</option></select></label>
+        <label>Action <select data-restore-action><option value="">All</option><option value="individual">Individual</option><option value="bulk_cleared">Bulk Clear</option><option value="restored">Restored</option></select></label>
       </div>
       <div data-restore-list class="history-list"></div>
       <div data-restore-preview class="availability-restore-preview" hidden></div>
@@ -1948,14 +1975,14 @@ function openAvailabilityRestoreHistory(): void {
     if (event.key === "Escape") close();
   };
   const filteredEntries = (): AvailabilityHistoryEntry[] => (state.availabilityHistory || [])
-    .filter((entry) => !employeeFilter.value || entry.localWorkerId === employeeFilter.value)
+    .filter((entry) => !employeeFilter.value || entry.localWorkerId === employeeFilter.value || (entry.employeeSnapshots || []).some((snapshot) => snapshot.localWorkerId === employeeFilter.value))
     .filter((entry) => !weekFilter.value || entry.weekStart === weekFilter.value)
-    .filter((entry) => !actionFilter.value || entry.actionType === actionFilter.value)
+    .filter((entry) => !actionFilter.value || (actionFilter.value === "individual" ? !isBulkAvailabilityEntry(entry) && entry.actionType !== "restored" : entry.actionType === actionFilter.value))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const renderFilters = (): void => {
     const employeeValue = employeeFilter.value;
     const weekValue = weekFilter.value;
-    const employees = [...new Map((state.availabilityHistory || []).map((entry) => [entry.localWorkerId, entry.employeeName] as const)).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+    const employees = [...new Map((state.availabilityHistory || []).flatMap((entry) => isBulkAvailabilityEntry(entry) ? (entry.employeeSnapshots || []).map((snapshot) => [snapshot.localWorkerId, snapshot.employeeName] as const) : [[entry.localWorkerId, entry.employeeName] as const])).entries()].filter(([id]) => id !== "__bulk__").sort((a, b) => a[1].localeCompare(b[1]));
     const weeks = [...new Set((state.availabilityHistory || []).map((entry) => entry.weekStart))].sort().reverse();
     employeeFilter.innerHTML = '<option value="">All employees</option>' + employees.map(([id, name]) => '<option value="' + escapeHtml(id) + '">' + escapeHtml(name) + '</option>').join("");
     weekFilter.innerHTML = '<option value="">All weeks</option>' + weeks.map((week) => '<option value="' + week + '">Week of ' + formatWeek(week) + '</option>').join("");
@@ -1969,7 +1996,7 @@ function openAvailabilityRestoreHistory(): void {
       list.innerHTML = '<div class="empty-state">No availability restore history matches these filters.</div>';
       return;
     }
-    list.innerHTML = entries.map((entry) => '<article class="history-row"><div><strong>' + escapeHtml(entry.employeeName) + '</strong><div class="meta">' + escapeHtml(formatSubmittedAt(entry.createdAt)) + '</div><span class="tag">' + escapeHtml(availabilityHistoryActionLabel(entry.actionType)) + '</span></div><div class="history-details"><span>Week of ' + formatWeek(entry.weekStart) + '</span><span>' + escapeHtml(availabilityHistorySummary(entry)) + '</span><span>Source: ' + escapeHtml(entry.source || 'Not recorded') + '</span></div><div class="card-actions"><button class="secondary" data-restore-preview-id="' + entry.id + '" type="button">Preview</button><button class="primary" data-restore-id="' + entry.id + '" type="button">Restore</button></div></article>').join("");
+    list.innerHTML = entries.map((entry) => '<article class="history-row"><div><strong>' + escapeHtml(availabilityHistoryTitle(entry)) + '</strong><div class="meta">' + escapeHtml(formatSubmittedAt(entry.createdAt)) + '</div><span class="tag">' + escapeHtml(availabilityHistoryActionLabel(entry.actionType)) + '</span></div><div class="history-details"><span>Week of ' + formatWeek(entry.weekStart) + '</span><span>' + escapeHtml(availabilityHistorySummary(entry)) + '</span><span>Source: ' + escapeHtml(entry.source || 'Not recorded') + '</span></div><div class="card-actions"><button class="secondary" data-restore-preview-id="' + entry.id + '" type="button">Preview</button><button class="primary" data-restore-id="' + entry.id + '" type="button">Restore</button></div></article>').join("");
     list.querySelectorAll<HTMLButtonElement>("[data-restore-preview-id]").forEach((button) => button.addEventListener("click", () => renderPreview(button.dataset.restorePreviewId || "")));
     list.querySelectorAll<HTMLButtonElement>("[data-restore-id]").forEach((button) => button.addEventListener("click", () => void restoreAvailabilityVersion(button.dataset.restoreId || "", renderList)));
   };
@@ -1977,7 +2004,7 @@ function openAvailabilityRestoreHistory(): void {
     const entry = (state.availabilityHistory || []).find((item) => item.id === id);
     if (!entry) return;
     preview.hidden = false;
-    preview.innerHTML = '<div class="section-head with-action"><div><h3>Preview Availability</h3><p>' + escapeHtml(entry.employeeName) + ' | Week of ' + formatWeek(entry.weekStart) + '</p></div><div class="actions-row"><button class="secondary" data-preview-close type="button">Close</button><button class="primary" data-preview-restore="' + entry.id + '" type="button">Restore This Version</button></div></div><div class="employee-availability-grid">' + DAYS.map((day) => '<div class="worker-availability-day"><span>' + day + '</span><strong>' + escapeHtml(entry.shiftAvailability[day] || (entry.availability.includes(day) ? 'Both' : 'Unavailable')) + '</strong></div>').join("") + '</div><div class="deadline-preview"><strong>Notes:</strong> ' + escapeHtml(entry.notes || 'None') + '</div>';
+    preview.innerHTML = '<div class="section-head with-action"><div><h3>Preview Availability</h3><p>' + escapeHtml(availabilityHistoryTitle(entry)) + ' | Week of ' + formatWeek(entry.weekStart) + '</p></div><div class="actions-row"><button class="secondary" data-preview-close type="button">Close</button><button class="primary" data-preview-restore="' + entry.id + '" type="button">Restore This Version</button></div></div>' + renderAvailabilityHistoryPreview(entry);
     preview.querySelector<HTMLButtonElement>("[data-preview-close]")?.addEventListener("click", () => { preview.hidden = true; preview.innerHTML = ""; });
     preview.querySelector<HTMLButtonElement>("[data-preview-restore]")?.addEventListener("click", () => void restoreAvailabilityVersion(id, renderList));
     preview.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -1991,19 +2018,45 @@ function openAvailabilityRestoreHistory(): void {
 }
 
 function availabilityHistoryActionLabel(actionType: AvailabilityHistoryAction): string {
-  return actionType === "saved" ? "Saved" : actionType === "updated" ? "Updated" : actionType === "cleared" ? "Cleared" : "Restored";
+  return actionType === "saved" ? "Saved" : actionType === "updated" ? "Updated" : actionType === "cleared" ? "Cleared" : actionType === "bulk_cleared" ? "Bulk Clear" : "Restored";
+}
+
+function isBulkAvailabilityEntry(entry: AvailabilityHistoryEntry): boolean {
+  return entry.actionType === "bulk_cleared" || (entry.employeeSnapshots || []).length > 0;
+}
+
+function availabilityHistoryTitle(entry: AvailabilityHistoryEntry): string {
+  if (!isBulkAvailabilityEntry(entry)) return entry.employeeName;
+  return entry.actionType === "restored" ? "Bulk availability restore" : "Bulk availability clear";
 }
 
 function availabilityHistorySummary(entry: AvailabilityHistoryEntry): string {
+  if (isBulkAvailabilityEntry(entry)) return (entry.actionType === "restored" ? "Bulk availability restored" : "Bulk availability clear") + " - " + (entry.employeeCount || entry.employeeSnapshots?.length || 0) + " employees - Week of " + formatWeek(entry.weekStart);
   if (entry.actionType === "cleared") return "Availability cleared";
   if (entry.actionType === "restored") return "Availability restored from an earlier version";
   if (entry.actionType === "updated") return "Availability updated for Week of " + formatWeek(entry.weekStart);
   return "Availability saved for Week of " + formatWeek(entry.weekStart);
 }
 
+function renderAvailabilityHistoryPreview(entry: AvailabilityHistoryEntry): string {
+  if (isBulkAvailabilityEntry(entry)) {
+    const snapshots = entry.employeeSnapshots || [];
+    return '<div class="deadline-preview"><strong>' + snapshots.length + ' employees included.</strong></div><div class="availability-bulk-preview">' + snapshots.map((snapshot) => '<article class="posted-day"><h2>' + escapeHtml(snapshot.employeeName) + '</h2><div class="employee-availability-grid">' + renderAvailabilitySnapshotDays(snapshot) + '</div>' + (snapshot.notes ? '<div class="deadline-preview"><strong>Notes:</strong> ' + escapeHtml(snapshot.notes) + '</div>' : '') + '</article>').join("") + '</div>';
+  }
+  return '<div class="employee-availability-grid">' + renderAvailabilitySnapshotDays(entry) + '</div><div class="deadline-preview"><strong>Notes:</strong> ' + escapeHtml(entry.notes || 'None') + '</div>';
+}
+
+function renderAvailabilitySnapshotDays(snapshot: AvailabilityHistoryWorkerSnapshot): string {
+  return DAYS.map((day) => '<div class="worker-availability-day"><span>' + day + '</span><strong>' + escapeHtml(snapshot.shiftAvailability[day] || (snapshot.availability.includes(day) ? 'Both' : 'Unavailable')) + '</strong></div>').join("");
+}
+
 async function restoreAvailabilityVersion(id: string, afterRestore?: () => void): Promise<void> {
   const entry = (state.availabilityHistory || []).find((item) => item.id === id);
   if (!entry) return;
+  if (isBulkAvailabilityEntry(entry)) {
+    await restoreBulkAvailabilityVersion(entry, afterRestore);
+    return;
+  }
   const worker = findWorker(entry.localWorkerId);
   if (!worker) { await showDialogMessage("This history entry is not linked to a current employee profile."); return; }
   if (!await requireAdminActionPassword("Restore Availability")) return;
@@ -2018,6 +2071,30 @@ async function restoreAvailabilityVersion(id: string, afterRestore?: () => void)
   if (selectedWorkerId === worker.id) resetAvailabilityDraft();
   await saveStateAndRender();
   addActivityLog({ category: "availability", actionType: "employee_availability_restored", message: "Availability restored for " + worker.name + ".", weekStart: entry.weekStart, employeeName: worker.name, employeeId: worker.id, employeeCode: worker.employeeCode, metadata: { restoredFromId: entry.id } });
+  showToast("Availability restored.", "good", 7000);
+  afterRestore?.();
+}
+
+async function restoreBulkAvailabilityVersion(entry: AvailabilityHistoryEntry, afterRestore?: () => void): Promise<void> {
+  const snapshots = entry.employeeSnapshots || [];
+  if (!snapshots.length) { await showDialogMessage("This bulk history entry does not contain employee availability details."); return; }
+  if (!await requireAdminActionPassword("Restore Availability")) return;
+  if (!await confirmDialog("Restore this availability snapshot? This will restore availability for all employees included in this backup.")) return;
+  const workersToRestore = snapshots.map((snapshot) => findWorker(snapshot.localWorkerId)).filter((worker): worker is Worker => Boolean(worker));
+  saveBulkAvailabilitySnapshot(workersToRestore, "restored", "bulk availability restore", entry.id, entry.weekStart);
+  snapshots.forEach((snapshot) => {
+    const worker = findWorker(snapshot.localWorkerId);
+    if (!worker) return;
+    worker.availability = [...snapshot.availability];
+    worker.shiftAvailability = DAYS.reduce((result, day) => {
+      result[day] = worker.availability.includes(day) ? (snapshot.shiftAvailability[day] || "Both") : "Unavailable";
+      return result;
+    }, {} as ShiftAvailabilityMap);
+  });
+  state.schedule = null;
+  resetAvailabilityDraft();
+  await saveStateAndRender();
+  addActivityLog({ category: "availability", actionType: "bulk_availability_restored", message: "Bulk availability restored.", weekStart: entry.weekStart, metadata: { restoredFromId: entry.id, employeeCount: snapshots.length } });
   showToast("Availability restored.", "good", 7000);
   afterRestore?.();
 }
@@ -2066,14 +2143,15 @@ function formatWeek(value: string): string {
 
 async function clearData(): Promise<void> {
   if (!await confirmDialog("This will reset all employee availability to Not Available. Employee profiles and schedule history will stay saved.")) return;
-  state.workers.filter(hasAvailabilityEntered).forEach((worker) => saveAvailabilitySnapshot(worker, "cleared", "admin clear"));
+  const snapshot = saveBulkAvailabilitySnapshot(state.workers.filter(hasAvailabilityEntered), "bulk_cleared", "admin clear");
+  if (snapshot) addActivityLog({ category: "availability", actionType: "availability_bulk_clear_backup_created", message: "Availability bulk clear backup created.", weekStart: snapshot.weekStart, metadata: { employeeCount: snapshot.employeeCount || 0, historyId: snapshot.id } });
   state.workers.forEach((worker) => {
     worker.availability = [];
     worker.shiftAvailability = DAYS.reduce((result, day) => ({ ...result, [day]: "Unavailable" as ShiftAvailability }), {} as ShiftAvailabilityMap);
   });
   state.schedule = null;
   await saveStateAndRender();
-  addActivityLog({ category: "availability", actionType: "employee_availability_cleared", message: "Employee availability cleared.", weekStart: currentAvailabilityWeekStart() });
+  addActivityLog({ category: "availability", actionType: "employee_availability_cleared", message: "Employee availability cleared.", weekStart: currentAvailabilityWeekStart(), metadata: { employeeCount: state.workers.length } });
 }
 
 async function loadPreferredSettings(): Promise<void> {

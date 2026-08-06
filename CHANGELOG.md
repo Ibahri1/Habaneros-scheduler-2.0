@@ -15,6 +15,8 @@
 - Added employee weekly day-limit fields for **No Day Limit**, **Maximum Days Worked**, and **Preferred Days Per Week**, with scheduler enforcement and import/export support.
 - Added **Restore Availability** history for employee availability snapshots, previews, and password-protected restores.
 - Updated employee-facing schedule displays to show shift times in 12-hour AM/PM format, including the manual calendar download description.
+- Updated availability restore history so the Clear action creates one bulk restore snapshot that previews and restores all included employees together.
+- Expanded employee website schedule time formatting to handle alternate published schedule fields and combined time ranges such as `08:00-15:00`.
 
 ## 1.10.23 - 2026-07-31
 

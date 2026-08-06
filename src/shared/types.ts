@@ -92,19 +92,23 @@ export interface ActivityLogEntry {
   userId?: string;
   metadata?: Record<string, unknown>;
 }
-export type AvailabilityHistoryAction = "saved" | "updated" | "cleared" | "restored";
-export interface AvailabilityHistoryEntry {
-  id: string;
-  createdAt: string;
+export type AvailabilityHistoryAction = "saved" | "updated" | "cleared" | "bulk_cleared" | "restored";
+export interface AvailabilityHistoryWorkerSnapshot {
   localWorkerId: string;
   employeeName: string;
   employeeCode?: string;
-  weekStart: string;
-  actionType: AvailabilityHistoryAction;
-  source?: string;
   availability: DayName[];
   shiftAvailability: ShiftAvailabilityMap;
   notes?: string;
+}
+export interface AvailabilityHistoryEntry extends AvailabilityHistoryWorkerSnapshot {
+  id: string;
+  createdAt: string;
+  weekStart: string;
+  actionType: AvailabilityHistoryAction;
+  source?: string;
+  employeeCount?: number;
+  employeeSnapshots?: AvailabilityHistoryWorkerSnapshot[];
   restoredFromId?: string;
 }
 export interface AppState { workers: Worker[]; rules: ScheduleRules; schedule: GeneratedSchedule | null; scheduleHistory: ScheduleHistoryEntry[]; activityLog: ActivityLogEntry[]; availabilityHistory: AvailabilityHistoryEntry[]; }

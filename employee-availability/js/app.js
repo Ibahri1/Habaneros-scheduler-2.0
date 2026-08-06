@@ -386,18 +386,43 @@ function renderPostedSchedule(schedule, week) {
 
 function renderPostedShift(shift, label) {
   const assigned = Array.isArray(shift?.assigned) ? shift.assigned : [];
-  return '<section class="posted-shift"><h3>' + escapeHtml(label) + '</h3>' + (assigned.length ? assigned.map((worker) => '<div class="posted-worker"><strong>' + escapeHtml(worker.name || "Employee") + '</strong><span>' + escapeHtml(formatShiftTimeRange(worker.start, worker.end)) + '</span>' + (worker.position ? '<em>' + escapeHtml(worker.position) + '</em>' : '') + '</div>').join("") : '<p class="hint">' + t("noSchedulePosted") + '</p>') + '</section>';
+  return '<section class="posted-shift"><h3>' + escapeHtml(label) + '</h3>' + (assigned.length ? assigned.map((worker) => '<div class="posted-worker"><strong>' + escapeHtml(worker.name || "Employee") + '</strong><span>' + escapeHtml(formatWorkerShiftTime(worker, shift)) + '</span>' + (worker.position ? '<em>' + escapeHtml(worker.position) + '</em>' : '') + '</div>').join("") : '<p class="hint">' + t("noSchedulePosted") + '</p>') + '</section>';
 }
 
 function renderMySchedule(schedule, week) {
   const days = orderedPostedScheduleDays(schedule, week);
   const rows = myScheduleRowsForDays(days);
   myScheduleRows = rows.map((row) => ({ ...row, week }));
-  mySchedule.innerHTML = '<div class="posted-week"><strong>' + t("weekOfSchedule") + " " + formatWeek(mondayWeekStart(week), currentLocale()) + '</strong></div>' + (rows.length ? rows.map(({ day, label, worker }) => '<article class="posted-day"><h2>' + escapeHtml(tDay(day.day) || day.day) + '</h2><p>' + escapeHtml(formatWeek(day.date, currentLocale())) + '</p><section class="posted-shift"><h3>' + escapeHtml(label) + '</h3><div class="posted-worker"><strong>' + escapeHtml(worker.name || verifiedEmployee.name || "Employee") + '</strong><span>' + escapeHtml(formatShiftTimeRange(worker.start, worker.end)) + '</span>' + (worker.position ? '<em>' + escapeHtml(worker.position) + '</em>' : '') + '</div></section></article>').join("") : '<div class="schedule-empty">' + t("notScheduled") + '</div>');
+  mySchedule.innerHTML = '<div class="posted-week"><strong>' + t("weekOfSchedule") + " " + formatWeek(mondayWeekStart(week), currentLocale()) + '</strong></div>' + (rows.length ? rows.map(({ day, label, shift, worker }) => '<article class="posted-day"><h2>' + escapeHtml(tDay(day.day) || day.day) + '</h2><p>' + escapeHtml(formatWeek(day.date, currentLocale())) + '</p><section class="posted-shift"><h3>' + escapeHtml(label) + '</h3><div class="posted-worker"><strong>' + escapeHtml(worker.name || verifiedEmployee.name || "Employee") + '</strong><span>' + escapeHtml(formatWorkerShiftTime(worker, shift)) + '</span>' + (worker.position ? '<em>' + escapeHtml(worker.position) + '</em>' : '') + '</div></section></article>').join("") : '<div class="schedule-empty">' + t("notScheduled") + '</div>');
 }
 
-function formatShiftTimeRange(start, end) {
-  return formatTime12Hour(start) + " - " + formatTime12Hour(end);
+function formatWorkerShiftTime(worker, shift) {
+  const times = getWorkerShiftTimes(worker, shift);
+  return formatShiftTimeRange(times.start, times.end);
+}
+
+function getWorkerShiftTimes(worker, shift) {
+  const combined = worker?.timeRange || worker?.time || worker?.shiftTime || worker?.shift_time || "";
+  if (combined) {
+    const rangeMatch = String(combined).trim().match(/^\s*(.+?)\s*(?:-|–|—|to)\s*(.+?)\s*$/i);
+    if (rangeMatch) return { start: rangeMatch[1], end: rangeMatch[2] };
+    return { start: combined, end: "" };
+  }
+  const start = worker?.start ?? worker?.startTime ?? worker?.start_time ?? shift?.start ?? shift?.startTime ?? shift?.openTime ?? shift?.closeTime ?? "";
+  const end = worker?.end ?? worker?.endTime ?? worker?.end_time ?? shift?.end ?? shift?.endTime ?? "";
+  return { start, end };
+}
+
+function formatShiftTimeRange(start, end = "") {
+  const first = String(start || "").trim();
+  const second = String(end || "").trim();
+  if (!first && !second) return "";
+  if (!second) {
+    const rangeMatch = first.match(/^\s*(.+?)\s*(?:-|–|—|to)\s*(.+?)\s*$/i);
+    if (rangeMatch) return formatTime12Hour(rangeMatch[1]) + " - " + formatTime12Hour(rangeMatch[2]);
+    return formatTime12Hour(first);
+  }
+  return formatTime12Hour(first) + " - " + formatTime12Hour(second);
 }
 
 function formatTime12Hour(value) {
@@ -422,7 +447,7 @@ function myScheduleRowsForDays(days) {
   days.forEach((day) => {
     [["open", t("openShift")], ["close", t("closeShift")]].forEach(([shiftKey, label]) => {
       const assigned = Array.isArray(day.shifts?.[shiftKey]?.assigned) ? day.shifts[shiftKey].assigned : [];
-      assigned.filter((worker) => employeeMatchesWorker(worker)).forEach((worker) => rows.push({ day, label, worker }));
+      assigned.filter((worker) => employeeMatchesWorker(worker)).forEach((worker) => rows.push({ day, label, shift: day.shifts[shiftKey], worker }));
     });
   });
   return rows;
@@ -458,11 +483,12 @@ function downloadSelectedWeekCalendarFile() {
 
 function buildMyScheduleIcs(rows, selectedWeek) {
   const stamp = icsStamp(new Date());
-  const events = rows.flatMap(({ day, label, worker, week }) => {
-    const start = localDateTime(day.date, worker.start || "08:00");
-    const end = localDateTime(day.date, worker.end || "08:00", start);
-    const uid = "habaneros-download-" + (verifiedEmployee?.localWorkerId || "employee") + "-" + day.date + "-" + (worker.start || "") + "-" + (worker.end || "") + "@habaneros-scheduler";
-    const description = ["Position: " + (worker.position || label), "Shift: " + formatShiftTimeRange(worker.start, worker.end), "Week of " + formatWeek(mondayWeekStart(week), currentLocale()), "Published from Habaneros Scheduler"].join("\\n");
+  const events = rows.flatMap(({ day, label, shift, worker, week }) => {
+    const shiftTimes = getWorkerShiftTimes(worker, shift);
+    const start = localDateTime(day.date, shiftTimes.start || "08:00");
+    const end = localDateTime(day.date, shiftTimes.end || shiftTimes.start || "08:00", start);
+    const uid = "habaneros-download-" + (verifiedEmployee?.localWorkerId || "employee") + "-" + day.date + "-" + (shiftTimes.start || "") + "-" + (shiftTimes.end || "") + "@habaneros-scheduler";
+    const description = ["Position: " + (worker.position || label), "Shift: " + formatShiftTimeRange(shiftTimes.start, shiftTimes.end), "Week of " + formatWeek(mondayWeekStart(week), currentLocale()), "Published from Habaneros Scheduler"].join("\\n");
     return ["BEGIN:VEVENT", "UID:" + uid, "DTSTAMP:" + stamp, "SUMMARY:Habaneros Shift", "LOCATION:Habaneros Mexican Food", "DESCRIPTION:" + icsText(description), "DTSTART;TZID=America/Los_Angeles:" + start.text, "DTEND;TZID=America/Los_Angeles:" + end.text, "BEGIN:VALARM", "TRIGGER:-PT1H", "ACTION:DISPLAY", "DESCRIPTION:Habaneros shift reminder", "END:VALARM", "END:VEVENT"];
   });
   return serializeIcs(["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Habaneros Scheduler//Employee Calendar//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH", "X-WR-CALNAME:Habaneros Work Schedule", "X-WR-TIMEZONE:America/Los_Angeles", "REFRESH-INTERVAL;VALUE=DURATION:PT1H", "X-PUBLISHED-TTL:PT1H", "X-HABANEROS-SHIFT-COUNT:" + rows.length, "X-HABANEROS-EMPLOYEE-NAME:" + icsText(verifiedEmployee?.name || "Employee"), ...(events.length ? losAngelesTimezoneBlock() : []), ...events, "END:VCALENDAR"]);
