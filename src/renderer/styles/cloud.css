@@ -400,3 +400,236 @@ button:disabled { opacity: .52; cursor: not-allowed; }
   color: var(--ink);
   border-color: var(--line);
 }
+
+@media (max-width: 900px) {
+  html,
+  body {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  body {
+    min-height: 100dvh;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .app-header {
+    gap: 12px;
+    padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
+  }
+
+  .main-nav {
+    width: 100%;
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    gap: 8px;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    padding: 2px 0 6px;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .nav-btn {
+    flex: 0 0 auto;
+    min-height: 44px;
+    white-space: nowrap;
+  }
+
+  .header-actions {
+    width: 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 6px;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .header-actions > * {
+    flex: 0 0 auto;
+  }
+
+  .layout {
+    width: 100%;
+    padding: 14px;
+  }
+
+  .section-head.with-action {
+    gap: 14px;
+  }
+
+  .section-head.with-action > .actions-row,
+  .important-actions,
+  .cloud-actions {
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .actions-row > button,
+  .cloud-actions > button,
+  .important-actions > button {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-header {
+    position: static;
+    padding-inline: 12px;
+  }
+
+  .app-brand {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .brand-logo-frame {
+    width: 150px;
+    height: 72px;
+  }
+
+  .brand-logo {
+    width: 150px;
+    transform: translateY(-12px);
+  }
+
+  .app-brand p {
+    font-size: .86rem;
+  }
+
+  .layout {
+    gap: 12px;
+    padding: 12px;
+    padding-bottom: calc(20px + env(safe-area-inset-bottom));
+  }
+
+  .panel {
+    padding: 14px;
+  }
+
+  .dashboard-grid,
+  .workers-list,
+  .worker-edit,
+  .day-checks,
+  .shift-list,
+  .employee-availability-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .worker-top,
+  .schedule-day-head,
+  .employee-profile-head {
+    flex-direction: column;
+  }
+
+  .card-actions,
+  .worker-top .card-actions,
+  .employee-profile-head .card-actions,
+  .submission-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .card-actions button,
+  .submission-actions button,
+  .employee-availability-actions button {
+    flex: 1 1 150px;
+  }
+
+  .assigned-person {
+    grid-template-columns: 1fr;
+  }
+
+  .shift-box {
+    min-height: 0;
+  }
+
+  .shift-title {
+    flex-direction: column;
+  }
+
+  .staffing-table,
+  .schedule-history-table,
+  .history-list,
+  .submissions-list,
+  .employee-results-list {
+    min-width: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .history-table-row,
+  .submission-row,
+  .history-row,
+  .employee-result-row {
+    min-width: 0;
+  }
+
+  .employee-availability-actions {
+    margin-inline: -14px;
+    padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
+  }
+
+  .app-toast {
+    top: auto;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    left: 12px;
+    right: 12px;
+    max-width: none;
+  }
+
+  .modal-shell {
+    align-items: start;
+    place-items: start stretch;
+    overflow-y: auto;
+    padding: calc(10px + env(safe-area-inset-top)) 10px calc(10px + env(safe-area-inset-bottom));
+  }
+
+  .modal-panel {
+    width: 100%;
+    max-height: calc(100dvh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    border-radius: 8px;
+    padding: 16px;
+  }
+
+  .preferred-settings-actions {
+    margin-inline: -16px;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  }
+
+  .schedule-rules-card summary {
+    padding: 14px;
+  }
+
+  input,
+  select,
+  textarea,
+  .primary,
+  .secondary {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 420px) {
+  .layout {
+    padding-inline: 8px;
+  }
+
+  .panel {
+    padding: 12px;
+  }
+
+  .main-nav,
+  .header-actions {
+    margin-inline: -4px;
+    padding-inline: 4px;
+  }
+
+  .dashboard-card {
+    min-height: 68px;
+  }
+
+  .modal-panel {
+    padding: 14px;
+  }
+}

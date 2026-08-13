@@ -26,6 +26,15 @@
   .assignment-actions { grid-column: 1 / -1; }
 }
 
+@media (max-width: 480px) {
+  .assignment-editor { grid-template-columns: 1fr; }
+  .assignment-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .assignment-actions button { min-height: 44px; }
+}
+
 @media print {
   .assignment-editor { display: none; }
 }

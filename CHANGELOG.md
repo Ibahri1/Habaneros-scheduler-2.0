@@ -2,6 +2,7 @@
 
 ## 1.10.26 - 2026-07-31
 
+- Improved desktop/web and employee-site responsive layouts for phones and tablets, including safer navigation, modal sizing, form stacking, schedule readability, and iPhone safe-area padding.
 - Added employee website cache busting and a console version marker for the 12-hour schedule time display fix.
 - Added a final display sanitizer so employee-facing schedule HTML converts embedded military times such as `08:00 - 15:00` before rendering.
 - Added a follow-up Supabase migration to fix ambiguous `local_worker_id` references in employee sync RPCs.

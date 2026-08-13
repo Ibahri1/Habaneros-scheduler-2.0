@@ -5,10 +5,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: calc(24px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom));
   overflow-x: hidden;
   overflow-y: auto;
   background: var(--bg);
+  overscroll-behavior: contain;
 }
 
 .login-screen[hidden] { display: none; }
@@ -57,10 +58,18 @@
 }
 
 @media (max-width: 520px) {
-  .login-screen { padding-inline: 14px; }
+  .login-screen {
+    align-items: flex-start;
+    padding: calc(14px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom));
+  }
   .login-card { padding: 22px; }
   .login-actions {
     align-items: stretch;
     flex-direction: column;
   }
+}
+
+@media (max-width: 380px) {
+  .login-card { padding: 18px; }
+  .login-logo { width: min(210px, 100%); }
 }

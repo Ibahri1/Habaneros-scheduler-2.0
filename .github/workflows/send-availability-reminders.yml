@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Call Supabase Edge Function
-        run: |
+    pwd    run: |
           curl --fail --show-error --silent \
             --request POST \
             --url "https://zwrgrgzixfrlipvdydtq.supabase.co/functions/v1/send-availability-reminders" \
